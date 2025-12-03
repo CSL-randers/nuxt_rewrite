@@ -25,7 +25,7 @@ export interface Rule {
     lastUsed: Run['bookingDate'] | null
     createdAt: Date
     updatedAt: Date | null
-    matchText: Array<string>
+    matchText: Array<string> | null
     matchCounterparty: Array<string> | null
     matchType: string
     matchAmountMin: number | null
