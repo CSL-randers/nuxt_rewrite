@@ -71,9 +71,6 @@
             class="bg-elevated/25"
             :ui="{ footer: 'lg:border-t lg:border-default' }"
         >  
-            <template #header="{ collapsed }">
-                <TeamsMenu :collapsed="collapsed" />
-            </template>
 
             <template #default="{ collapsed }">
                 <UDashboardSearchButton :collapsed="collapsed" class="bg-transparent ring-default" />
@@ -93,10 +90,6 @@
                 tooltip
                 class="mt-auto"
                 />
-            </template>
-
-            <template #footer="{ collapsed }">
-                <UserMenu :collapsed="collapsed" />
             </template>
 
         </UDashboardSidebar>

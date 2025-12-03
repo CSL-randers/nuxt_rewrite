@@ -1,5 +1,5 @@
-export type RuleStatus = 'aktiv' | 'inaktiv' | 'alle'
-export type RuleType = 'standard' | 'undtagelse' | 'engangs' | 'alle'
+export type RuleStatus = 'aktiv' | 'inaktiv'
+export type RuleType = 'standard' | 'undtagelse' | 'engangs'
 export type CprType = 'dynamisk' | 'statisk' | 'ingen'
 
 export type RunStatus = 'afventer' | 'indlæser' | 'udført' | 'fejl'
@@ -9,7 +9,6 @@ export type ErpSupplier = 'KMD' | 'andet'
 export interface RuleTag {
     id: number
     name: string
-    color: string // Hex color code
 }
 
 export interface BankAccount {
@@ -22,6 +21,7 @@ export interface Rule {
     id: number
     type: RuleType
     status: RuleStatus
+    bankAccountName: BankAccount['name']
     lastUsed: Run['bookingDate'] | null
     createdAt: Date
     updatedAt: Date | null

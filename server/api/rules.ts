@@ -1,10 +1,12 @@
 import type { Rule } from '~/types'
 
+// Mock data for rules
 const rules: Rule[] = [
     {
         id: 0,
         type: 'standard',
         status: 'aktiv',
+        bankAccountName: 'Hovedkonto',
         lastUsed: new Date('2023-07-31'),
         createdAt: new Date('2022-12-21'),
         updatedAt: new Date('2023-02-05'),
@@ -26,17 +28,17 @@ const rules: Rule[] = [
         accountingAttachmentData: null,
         ruleTags: [{
             id: 0,
-            name: 'Refusion',
-            color: '#FF5733'
+            name: 'Refusion'
         }],
     }, {
         id: 1,
         type: 'engangs',
         status: 'inaktiv',
+        bankAccountName: 'Mellerup',
         lastUsed: null,
         createdAt: new Date('2022-12-21'),
         updatedAt: null,
-        matchText: [ 'Mellerup' ],
+        matchText: [ 'Mellerup', 'Kontant' ],
         matchCounterparty: null,
         matchType: 'Indbetaling',
         matchAmountMin: null,
@@ -54,13 +56,13 @@ const rules: Rule[] = [
         accountingAttachmentData: null,
         ruleTags: [{
             id: 1,
-            name: 'Kontantindbetaling',
-            color: '#33adffff'
+            name: 'Kontantindbetaling'
         }],
     }, {
         id: 2,
         type: 'undtagelse',
         status: 'aktiv',
+        bankAccountName: 'Hovedkonto',
         lastUsed: new Date('2023-01-02'),
         createdAt: new Date('2022-12-21'),
         updatedAt: null,
@@ -82,14 +84,11 @@ const rules: Rule[] = [
         accountingAttachmentData: null,
         ruleTags: [{
             id: 2,
-            name: 'Renter',
-            color: '#ddff33ff'
+            name: 'Renter'
         }],
     }
 ]
 
 export default defineEventHandler((event) => {
-  return {
-    rules
-  }
+  return rules
 })
