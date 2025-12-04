@@ -16,51 +16,18 @@ const classMultiplePropsColumn = 'flex flex-col gap-1 text-sm'
 const toast = useToast()
 const table = useTemplateRef('table')
 
+const globalFilterValue = ref('')
+
 const { data, status } = await useFetch<Rule[]>('/api/rules', {
   lazy: true
 })
 
-// Normaliser data til et array (håndter både ref<Array> og { data: Array } svar)
+// Normaliserer data fra API'et til en array af regler
 const rows = computed<Rule[]>(() => {
   const v = (data as any)?.value ?? data
   if (Array.isArray(v)) return v
   if (v && Array.isArray(v.data)) return v.data
   return []
-})
-
-const globalFilterFn = (row: any, columnId: string, filterValue: string) => {
-  if (!filterValue) return true
-  
-  const value = row.getValue(columnId)
-  const searchLower = filterValue.toLowerCase()
-  
-  // String
-  if (typeof value === 'string') {
-    return value.toLowerCase().includes(searchLower)
-  }
-  
-  // Array af strings
-  if (Array.isArray(value) && value.every(v => typeof v === 'string')) {
-    return value.some(v => v.toLowerCase().includes(searchLower))
-  }
-  
-  // Array af objects med .name
-  if (Array.isArray(value)) {
-    return value.some(item => {
-      const text = typeof item === 'string' ? item : item?.name || String(item)
-      return text.toLowerCase().includes(searchLower)
-    })
-  }
-  
-  return false
-}
-
-const globalFilter = ref('')
-
-const columnVisibility = ref({
-  status: false,
-  type: false,
-  bankAccountName: false
 })
 
 // Items i dropdown-menu for hver række
@@ -91,6 +58,15 @@ function getRowItems(row: Row<Rule>) {
   ]
 }
 
+const columnVisibility = ref({
+  status: false,
+  type: false,
+  bankAccountName: false,
+  matchText_flat: false,
+  matchCounterparty_flat: false,
+  ruleTags_flat: false
+})
+
 const columns: TableColumn<Rule>[] = [
   { // Selekteringskolonne
     id: 'select',
@@ -113,12 +89,10 @@ const columns: TableColumn<Rule>[] = [
   { // RuleID
     accessorKey: 'id',
     header: 'ID',
-    filterFn: globalFilterFn as any,
   },
   { // Søgeord (badges)
     accessorKey: 'matchText',
     header: 'Søgeord',
-    filterFn: globalFilterFn as any,
     cell: ({ row }) => {
       
       return h(
@@ -140,7 +114,6 @@ const columns: TableColumn<Rule>[] = [
   { // Modpart eller afsender/modtager (badges)
     accessorKey: 'matchCounterparty',
     header: 'Modpart',
-    filterFn: globalFilterFn as any,
     cell: ({ row }) => {
       
       return h(
@@ -162,39 +135,36 @@ const columns: TableColumn<Rule>[] = [
   { // Transaktionstype
     accessorKey: 'matchType',
     header: 'Transaktionstype',
-    filterFn: globalFilterFn as any,
     cell: ({ row }) => row.original.matchType
   },
   { // Ruletags (badges)
-      accessorKey: 'ruleTags',
-      header: 'Tags',
-      filterFn: globalFilterFn as any,
-      cell: ({ row }) => {
-          return h(
-              'div',
-              { class: classBadgeColumn },
-              row.original.ruleTags?.map((tag: any) =>
-                  h(UBadge, { class: 'capitalize', variant: 'subtle', color: 'secondary' }, () =>
-                      tag.name
-                  )
-              )
-          )
-      }
+    accessorKey: 'ruleTags',
+    header: 'Tags',
+    cell: ({ row }) => {
+        return h(
+            'div',
+            { class: classBadgeColumn },
+            row.original.ruleTags?.map((tag: any) =>
+                h(UBadge, { class: 'capitalize', variant: 'subtle', color: 'secondary' }, () =>
+                    tag.name
+                )
+            )
+        )
+    }
   },
   { // Type (hidden, kun til filtrering)
     accessorKey: 'type',
-    header: 'Type',
+    enableHiding: false,
     cell: ({ row }) => row.original.type
   },
   { // Status (hidden, kun til filtrering)
     accessorKey: 'status',
-    header: 'Status',
+    enableHiding: false,
     cell: ({ row }) => row.original.status
   },
   { // Konto (hidden, kun til filtrering)
     accessorKey: 'bankAccountName',
-    header: 'Konto',
-    filterFn: globalFilterFn as any,
+    enableHiding: false,
     cell: ({ row }) => row.original.bankAccountName
   },
   { // Status, Konto og Type
@@ -239,8 +209,30 @@ const columns: TableColumn<Rule>[] = [
       ])
     }
   },
+  { // matchText_flat (hidden, kun til filtrering)
+    id: 'matchText_flat',
+    accessorFn: (row: Rule) =>
+      Array.isArray(row.matchText) ? row.matchText.join(' ') : (row.matchText ?? ''),
+    enableHiding: false,
+    cell: () => null
+  },
+  { // matchCounterparty_flat (hidden, kun til filtrering)
+    id: 'matchCounterparty_flat',
+    accessorFn: (row: Rule) =>
+      Array.isArray(row.matchCounterparty) ? row.matchCounterparty.join(' ') : (row.matchCounterparty ?? ''),
+    enableHiding: false,
+    cell: () => null
+  },
+  { // ruleTags_flat (hidden, kun til filtrering)
+    id: 'ruleTags_flat',
+    accessorFn: (row: Rule) =>
+      Array.isArray(row.ruleTags) ? row.ruleTags.map((t: any) => t?.name).filter(Boolean).join(' ') : '',
+    enableHiding: false,
+    cell: () => null
+  },
   { // Handlinger
     id: 'actions',
+    enableHiding: false,
     cell: ({ row }) => {
       return h(
         'div',
@@ -339,7 +331,7 @@ const pagination = ref({
     <template #body>
       <div class="flex flex-wrap items-center justify-between gap-1.5">
         <UInput
-          v-model="globalFilter"
+          v-model="globalFilterValue"
           class="max-w-sm"
           icon="solar:magnifer-bold-duotone"
           placeholder="Søg efter en regel..."
@@ -409,7 +401,7 @@ const pagination = ref({
             :content="{ align: 'end' }"
           >
             <UButton
-              label="Display"
+              label="Vis kolonner"
               color="neutral"
               variant="outline"
               trailing-icon="i-lucide-settings-2"
@@ -420,7 +412,7 @@ const pagination = ref({
 
       <UTable
         ref="table"
-        v-model:global-filter="globalFilter"
+        v-model:global-filter="globalFilterValue"
         v-model:column-visibility="columnVisibility"
         v-model:pagination="pagination"
         :pagination-options="{
@@ -440,13 +432,14 @@ const pagination = ref({
         }"
       />
 
-      <div class="flex items-center justify-between gap-3 border-t border-default pt-4 mt-auto">
-        <div class="text-sm text-muted">
-          {{ table?.tableApi?.getFilteredSelectedRowModel().rows.length || 0 }} af
-          {{ table?.tableApi?.getFilteredRowModel().rows.length || 0 }} række(r) valgt.
+      <div class="flex items-center border-t border-default pt-4 mt-auto">
+        <div class="flex-1 text-sm text-muted">
+          <template v-if="table?.tableApi?.getFilteredSelectedRowModel().rows.length">
+            {{ table?.tableApi?.getFilteredSelectedRowModel().rows.length || 0 }} af
+            {{ table?.tableApi?.getFilteredRowModel().rows.length || 0 }} række(r) valgt
+          </template>
         </div>
-
-        <div class="flex items-center gap-1.5">
+        <div class="flex justify-center flex-1">
           <UPagination
             :default-page="(table?.tableApi?.getState().pagination.pageIndex || 0) + 1"
             :items-per-page="table?.tableApi?.getState().pagination.pageSize"
@@ -454,6 +447,7 @@ const pagination = ref({
             @update:page="(p: number) => table?.tableApi?.setPageIndex(p - 1)"
           />
         </div>
+        <div class="flex-1"></div>
       </div>
     </template>
   </UDashboardPanel>

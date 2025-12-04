@@ -73,7 +73,10 @@
         >  
 
             <template #default="{ collapsed }">
-                <UDashboardSearchButton :collapsed="collapsed" class="bg-transparent ring-default" />
+                <div class="flex flex-wrap gap-1 w-full">  
+                    <UColorModeButton />
+                    <UDashboardSearchButton :collapsed="collapsed" class="bg-transparent ring-default flex-1" />
+                </div>
 
                 <UNavigationMenu
                 :collapsed="collapsed"
@@ -90,10 +93,10 @@
                 tooltip
                 class="mt-auto"
                 />
+
             </template>
 
         </UDashboardSidebar>
-
         <slot />
 
     </UDashboardGroup>
