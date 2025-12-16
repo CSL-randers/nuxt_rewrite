@@ -3,6 +3,8 @@ const colorMode = useColorMode()
 
 const color = computed(() => colorMode.value === 'dark' ? '#1b1718' : 'white')
 
+import { da } from '@nuxt/ui/locale'
+
 useHead({
   meta: [
     { charset: 'utf-8' },
@@ -32,7 +34,7 @@ useSeoMeta({
 </script>
 
 <template>
-  <UApp>
+  <UApp :locale="da">
     <NuxtLoadingIndicator />
 
     <NuxtLayout>

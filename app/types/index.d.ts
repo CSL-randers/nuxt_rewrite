@@ -5,6 +5,7 @@ export type CprType = 'dynamisk' | 'statisk' | 'ingen'
 export type RunStatus = 'afventer' | 'indlæser' | 'udført' | 'fejl'
 export type DocumentType = 'afstemning' | 'postering'
 export type ErpSupplier = 'KMD' | 'andet'
+export type BookingStatus = 'bogført' | 'åben'
 
 export interface RuleTag {
     id: number
@@ -48,8 +49,13 @@ export interface Transaction {
     id: string
     bookingDate: Run['bookingDate']
     bankAccount: BankAccount['id']
-    data: JSON
-    ruleApplied: Rule | null
+    bankAccountName: BankAccount['name']
+    amount: number
+    transactionType: string
+    counterpart: string | null
+    references: Array<string> | null
+    ruleApplied: Rule['id'] | null
+    status: BookingStatus
 }
 
 export interface MasterData {

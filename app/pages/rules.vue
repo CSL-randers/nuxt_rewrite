@@ -1,9 +1,10 @@
 <script setup lang="ts">
 import type { TableColumn } from '@nuxt/ui'
 import { upperFirst } from 'scule'
-import { getPaginationRowModel } from '@tanstack/table-core'
+import { flattenBy, getPaginationRowModel } from '@tanstack/table-core'
 import type { Row } from '@tanstack/table-core'
 import type { Rule } from '~/types'
+import useFlattenArray from '~/composables/useFlattenArray'
 
 const UButton = resolveComponent('UButton')
 const UBadge = resolveComponent('UBadge')
@@ -23,12 +24,7 @@ const { data, status } = await useFetch<Rule[]>('/api/rules', {
 })
 
 // Normaliserer data fra API'et til en array af regler
-const rows = computed<Rule[]>(() => {
-  const v = (data as any)?.value ?? data
-  if (Array.isArray(v)) return v
-  if (v && Array.isArray(v.data)) return v.data
-  return []
-})
+const rows = computed<Rule[]>(() => useFlattenArray<Rule>(data));
 
 // Items i dropdown-menu for hver række
 function getRowItems(row: Row<Rule>) {
