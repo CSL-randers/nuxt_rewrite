@@ -17,8 +17,8 @@ const transactions: Transaction[] = [
     {
         id: '0000954425',
         bookingDate: new Date('2025-09-15'),
-        bankAccount: 'DK20005908764988-DKK',
-        bankAccountName: 'Hovedkonto',
+        bankAccount: 'DK20009042714507-DKK',
+        bankAccountName: 'Kreditorkonto',
         counterpart: 'PARKMAN OY',
         amount: 5038.75,
         transactionType: 'BGS',
@@ -40,6 +40,10 @@ const transactions: Transaction[] = [
     }
 ]
 
-export default defineEventHandler((event) => {
-  return transactions
-})
+export default cachedEventHandler(
+  async (event) => {
+    setHeader(event, 'X-Cache', 'HIT')
+    return await transactions
+  },
+  { maxAge: 120 }
+)

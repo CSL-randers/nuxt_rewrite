@@ -20,7 +20,7 @@ const table = useTemplateRef('table')
 const globalFilterValue = ref('')
 
 const { data, status } = await useFetch<Rule[]>('/api/rules', {
-  lazy: true
+  key: 'rules'
 })
 
 // Normaliserer data fra API'et til en array af regler
@@ -319,7 +319,7 @@ const pagination = ref({
         </template>
 
         <template #right>
-          <!-- <RulesAddModal /> -->
+          <RulesAddModal />
         </template>
       </UDashboardNavbar>
     </template>

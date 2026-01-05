@@ -89,6 +89,11 @@ const rules: Rule[] = [
     }
 ]
 
-export default defineEventHandler((event) => {
-  return rules
-})
+export default cachedEventHandler(
+  async (event) => {
+    setHeader(event, 'X-Cache', 'HIT')
+    return await rules
+  },
+  { maxAge: 120 }
+)
+

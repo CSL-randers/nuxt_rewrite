@@ -2,7 +2,7 @@
     import type { Transaction } from '~/types'
     import useFlattenArray from '~/composables/useFlattenArray'
     
-    const { data, status } = await useFetch<Transaction[]>('/api/transactions', {
+    const { data } = await useFetch<Transaction[]>('/api/transactions', {
         lazy: true
     })
 
@@ -12,29 +12,32 @@
         const result: Record<string, Transaction[]> = {}
 
         postings.value.forEach(tx => {
-            if (!result[tx.bankAccountName]) {
-                result[tx.bankAccountName] = []
+            const accountName = tx.bankAccountName || 'Ukendt konto'
+            if (!result[accountName]) {
+                result[accountName] = []
             }
-            result[tx.bankAccountName].push(tx)
+            result[accountName].push(tx)
         })
 
         return result
     });
     
-    type VisibleTransaction = Pick<
-        Transaction,
-        'id' | 'amount' | 'transactionType' | 'counterpart' | 'references'
-    >
+    type VisibleTransaction = {
+        Beløb: number | null
+        Transaktionstype: string
+        Modpart: string
+        Referencer: string[]
+    }
 
-    const visibleDataById = computed<Record<number, VisibleTransaction>>(() => {
-        const result: Record<number, VisibleTransaction> = {}
+    const visibleDataById = computed<Record<string, VisibleTransaction>>(() => {
+        const result: Record<string, VisibleTransaction> = {}
 
         postings.value.forEach(tx => {
             result[tx.id] = {
-                Beløb: tx.amount,
-                Transaktionstype: tx.transactionType,
-                Modpart: tx.counterpart,
-                Referencer: tx.references
+                Beløb: tx.amount ?? null,
+                Transaktionstype: tx.transactionType ?? '',
+                Modpart: tx.counterpart ?? '',
+                Referencer: tx.references ?? []
             }
         })
         return result
@@ -46,7 +49,7 @@
     })
 
     const formatValue = (key: string, value: unknown): string | string[] => {
-        if (key === 'amount' && typeof value === 'number') {
+        if (key === 'Beløb' && typeof value === 'number') {
             return amountFormatter.format(value)
         }
 
@@ -75,6 +78,7 @@
                 v-for="(items, account) in postingsByAccount"
                 :key="account"
                 :title="account"
+                headline="Nordea"
             >
                 <UPageColumns>
                     <UPageCard
@@ -83,16 +87,15 @@
                         :title="'Transaktion #' + item.id"
                         :description="new Date(item.bookingDate).toLocaleDateString('da-DK')"
                         :disabled="!visibleDataById[item.id]"
-                        spotlight
-                        spotlight-color="primary"
+                        variant="soft"
                     >
                         <div v-if="visibleDataById[item.id]" class="space-y-1 text-sm">
                             <div
-                                v-for="([key, value]) in Object.entries(visibleDataById[item.id])"
+                                v-for="([key, value]) in Object.entries(visibleDataById[item.id] ?? {})"
                                 :key="key"
                                 class="flex justify-between gap-4"
                             >
-                                <span class="font-medium text-gray-600 whitespace-nowrap">
+                                <span class="font-medium text-gray-400 whitespace-nowrap">
                                     {{ key }}
                                 </span>
 
@@ -112,6 +115,19 @@
                                 </span>
                             </div>
                         </div>
+                        <div></div>
+                        <USeparator>
+                            <div class="flex items-center justify-between gap-2">
+                                <span class="font-medium whitespace-nowrap">
+                                    Behandl
+                                </span>
+                                <UButton
+                                    class="font-bold rounded-full"
+                                    trailing-icon="solar:pen-new-round-bold-duotone"
+                                    size="xl"
+                                />
+                            </div>
+                        </USeparator>
                     </UPageCard>
                 </UPageColumns>
             </UPageSection>
