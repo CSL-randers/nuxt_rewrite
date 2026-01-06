@@ -1,4 +1,5 @@
 <script setup lang="ts">
+    import { CalendarDate, DateFormatter, getLocalTimeZone } from '@internationalized/date'
     import type { TableColumn } from '@nuxt/ui'
     import type { Run, RunStatus } from '~/types'
     import useFlattenArray from '~/composables/useFlattenArray'
@@ -7,9 +8,15 @@
         key: 'runs'
     })
 
-    const rows = computed<Run[]>(() => useFlattenArray<Run>(data))
+    const allRows = computed<Run[]>(() => useFlattenArray<Run>(data))
 
-    const table = useTemplateRef('table')
+    // Date formatter
+    const df = new DateFormatter('da-DK', {
+        dateStyle: 'medium'
+    })
+
+    // Date range picker state - using CalendarDate
+    const dateRange = ref<{ start?: CalendarDate; end?: CalendarDate }>({})
 
     // Popover state
     const openPopovers = ref<Record<string, string | null>>({})
@@ -22,6 +29,41 @@
             afventer: 'neutral'
         }[status]
     }
+
+    // Get calendar events grouped by date with status colors
+    const calendarEvents = computed(() => {
+        const events: Record<string, Array<{ color: string; label: string }>> = {}
+        
+        allRows.value.forEach(run => {
+            const dateKey = new Date(run.bookingDate).toISOString().split('T')[0]
+            if (!events[dateKey]) {
+                events[dateKey] = []
+            }
+            events[dateKey].push({
+                color: getColorByStatus(run.status),
+                label: run.status
+            })
+        })
+
+        return events
+    })
+
+    // Filter rows based on date range
+    const rows = computed<Run[]>(() => {
+        if (!dateRange.value.start || !dateRange.value.end) {
+            return allRows.value
+        }
+
+        const start = dateRange.value.start.toDate(getLocalTimeZone())
+        const end = dateRange.value.end.toDate(getLocalTimeZone())
+        start.setHours(0, 0, 0, 0)
+        end.setHours(23, 59, 59, 999)
+
+        return allRows.value.filter(run => {
+            const runDate = new Date(run.bookingDate)
+            return runDate >= start && runDate <= end
+        })
+    })
 
     const togglePopover = (runId: string, type: string) => {
         const key = `${runId}-${type}`
@@ -128,21 +170,70 @@
         </template>
 
         <template #body>
-            <UTable
-                ref="table"
-                :data="rows"
-                :columns="columns"
-                :loading="status === 'pending'"
-                :ui="{
-                    base: 'border-separate border-spacing-0',
-                    thead: '[&>tr]:bg-elevated/50 [&>tr]:after:content-none',
-                    tbody: '[&>tr]:last:[&>td]:border-b-0',
-                    tr: 'group',
-                    th: 'py-2 first:rounded-l-lg last:rounded-r-lg border-y border-default first:border-l last:border-r',
-                    td: 'empty:p-0 group-has-[td:not(:empty)]:border-b border-default',
-                    separator: 'h-0'
-                }"
-            />
+            <div class="space-y-4">
+                <!-- Date Range Picker -->
+                <UPopover :popper="{ placement: 'bottom-start' }">
+                    <UButton
+                        variant="outline"
+                        icon="i-lucide-calendar"
+                    >
+                        <template v-if="dateRange.start">
+                            <template v-if="dateRange.end">
+                                {{ df.format(dateRange.start.toDate(getLocalTimeZone())) }} - {{ df.format(dateRange.end.toDate(getLocalTimeZone())) }}
+                            </template>
+                            <template v-else>
+                                {{ df.format(dateRange.start.toDate(getLocalTimeZone())) }}
+                            </template>
+                        </template>
+                        <template v-else>
+                            Vælg periode
+                        </template>
+                    </UButton>
+
+                    <template #content>
+                        <div class="p-4">
+                            <UCalendar
+                                v-model="dateRange"
+                                :events="calendarEvents"
+                                class="p-2"
+                                :number-of-months="2"
+                                range
+                            />
+                            <div v-if="dateRange.start && dateRange.end" class="mt-4 flex gap-2">
+                                <UButton
+                                    variant="ghost"
+                                    size="sm"
+                                    label="Nulstil"
+                                    @click="dateRange = {}"
+                                    class="flex-1"
+                                />
+                            </div>
+                        </div>
+                    </template>
+                </UPopover>
+
+                <!-- Table -->
+                <div>
+                    <div v-if="dateRange.start && dateRange.end" class="text-sm text-muted mb-3">
+                        {{ rows.length }} kørsler i valgt periode
+                    </div>
+                    <UTable
+                        ref="table"
+                        :data="rows"
+                        :columns="columns"
+                        :loading="status === 'pending'"
+                        :ui="{
+                            base: 'border-separate border-spacing-0',
+                            thead: '[&>tr]:bg-elevated/50 [&>tr]:after:content-none',
+                            tbody: '[&>tr]:last:[&>td]:border-b-0',
+                            tr: 'group',
+                            th: 'py-2 first:rounded-l-lg last:rounded-r-lg border-y border-default first:border-l last:border-r',
+                            td: 'empty:p-0 group-has-[td:not(:empty)]:border-b border-default',
+                            separator: 'h-0'
+                        }"
+                    />
+                </div>
+            </div>
         </template>
     </UDashboardPanel>
 </template>

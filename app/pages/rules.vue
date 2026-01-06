@@ -189,7 +189,7 @@ const columns: TableColumn<Rule>[] = [
   { // Datoer
     id: 'dates',
     cell: ({ row }) => {
-      const formatDate = (date: Date | null) => {
+      const formatDate = (date: Date | undefined) => {
         if (!date) return 'N/A'
         return new Date(date).toLocaleDateString('da-DK', {
           year: 'numeric',
@@ -210,21 +210,21 @@ const columns: TableColumn<Rule>[] = [
     accessorFn: (row: Rule) =>
       Array.isArray(row.matchText) ? row.matchText.join(' ') : (row.matchText ?? ''),
     enableHiding: false,
-    cell: () => null
+    cell: () => undefined
   },
   { // matchCounterparty_flat (hidden, kun til filtrering)
     id: 'matchCounterparty_flat',
     accessorFn: (row: Rule) =>
       Array.isArray(row.matchCounterparty) ? row.matchCounterparty.join(' ') : (row.matchCounterparty ?? ''),
     enableHiding: false,
-    cell: () => null
+    cell: () => undefined
   },
   { // ruleTags_flat (hidden, kun til filtrering)
     id: 'ruleTags_flat',
     accessorFn: (row: Rule) =>
       Array.isArray(row.ruleTags) ? row.ruleTags.map((t: any) => t?.name).filter(Boolean).join(' ') : '',
     enableHiding: false,
-    cell: () => null
+    cell: () => undefined
   },
   { // Handlinger
     id: 'actions',

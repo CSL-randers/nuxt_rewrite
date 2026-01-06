@@ -1,17 +1,15 @@
 import { z } from 'zod'
-import RuleStatus from '~/types'
-import RuleType from '~/types'
-import CprType from '~/types'
+import { RuleStatusValues, RuleTypeValues, CprTypeValues } from '~/types'
 
+// Her antager vi, at RuleStatus, RuleType, CprType er string unions
 export const ruleFormSchema = z.object({
-  type: z.enum(RuleType),
-  status: z.enum(RuleStatus),
-
-  bankAccountName: z.string().min(1),
+  type: z.enum(RuleTypeValues),           // f.eks. ['standard','undtagelse','engangs']
+  status: z.enum(RuleStatusValues),       // f.eks. ['aktiv','inaktiv']
+  relatedBankAccounts: z.array(z.string()).min(1), // skal matche state.relatedBankAccounts
 
   matchText: z.array(z.string()).nullable(),
   matchCounterparty: z.array(z.string()).nullable(),
-  matchType: z.string(),
+  matchType: z.string().nullable(), // tillad null så det kan cleares
 
   matchAmountMin: z.number().nullable(),
   matchAmountMax: z.number().nullable(),
@@ -22,11 +20,18 @@ export const ruleFormSchema = z.object({
 
   accountingText: z.string().nullable(),
 
-  accountingCprType: z.enum(CprType),
+  accountingCprType: z.enum(CprTypeValues),
   accountingCprNumber: z.string().nullable(),
 
-  accountingNotifyTo: z.email().nullable(), // må kun være i domænet randers.dk
+  accountingNotifyTo: z
+    .string()
+    .email()
+    .nullable()
+    .refine(val => !val || val.endsWith('@randers.dk'), { message: 'Email skal være @randers.dk' }),
+    
   accountingNote: z.string().nullable(),
 
   ruleTags: z.array(z.string()).nullable()
 })
+
+export type RuleFormSchema = z.infer<typeof ruleFormSchema>

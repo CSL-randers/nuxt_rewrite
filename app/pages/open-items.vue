@@ -23,7 +23,7 @@
     });
     
     type VisibleTransaction = {
-        Beløb: number | null
+        Beløb: number | undefined
         Transaktionstype: string
         Modpart: string
         Referencer: string[]
@@ -34,7 +34,7 @@
 
         postings.value.forEach(tx => {
             result[tx.id] = {
-                Beløb: tx.amount ?? null,
+                Beløb: tx.amount ?? undefined,
                 Transaktionstype: tx.transactionType ?? '',
                 Modpart: tx.counterpart ?? '',
                 Referencer: tx.references ?? []
