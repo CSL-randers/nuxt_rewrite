@@ -3,10 +3,9 @@
 		import type { BankAccount, TransactionType, Rule, RuleStatus, RuleType, CprType } from '~/types'
 		import type { RuleFormSchema } from '~/schemas/rules.schema'
 
-		type RuleForm = Omit<
-				Rule,
-				'id' | 'createdAt' | 'updatedAt' | 'lastUsed' | 'accountingAttachmentName' | 'accountingAttachmentMimetype' | 'accountingAttachmentData'
-		>
+		const open = ref(false)
+		const currentStep = ref(0)
+		const toast = useToast()
 
 		const steps = [
 			{ id: 'basic', title: 'Basis', description: 'Vælg type, status og bankkonto' },
@@ -14,9 +13,17 @@
 			{ id: 'accounting', title: 'Kontering', description: 'Angiv oplysninger relevant for bogføringen' }
 		]
 
-		const open = ref(false)
-		const currentStep = ref(0)
-		const toast = useToast()
+		type AttachmentPayload = {
+			names: string[]
+			extensions: string[]
+			base64: string[]
+		}
+
+		const attachments = ref<AttachmentPayload | null>(null)
+
+		const handleAttachmentUpdate = (value: AttachmentPayload | null) => {
+			attachments.value = value
+		}
 
 		type BankAccountOption = { label: string, value: string }
 
@@ -46,12 +53,14 @@
 
 		// Form state
 		const state = reactive<Partial<RuleFormSchema>>({
+			createdAt: new Date(),
+			updatedAt: new Date(),
 			type: 'standard',
 			status: 'aktiv',
 			relatedBankAccounts: [] as string[],
 			matchText: undefined,
 			matchCounterparty: undefined,
-			matchType: undefined,
+			matchType: [] as string[],
 			matchAmountMin: undefined,
 			matchAmountMax: undefined,
 			accountingPrimaryAccount: undefined,
@@ -62,7 +71,10 @@
 			accountingCprNumber: undefined,
 			accountingNotifyTo: undefined,
 			accountingNote: undefined,
-			ruleTags: undefined
+			ruleTags: undefined,
+			accountingAttachmentName: undefined,
+			accountingAttachmentMimetype: undefined,
+			accountingAttachmentData: undefined
 		})
 
 		// Watch hele state for debugging
@@ -110,11 +122,11 @@
 		}
 
 		const addMatchCounterparty = () => {
-				if (matchCounterpartyInput.value.trim()) {
-						if (!state.matchCounterparty) state.matchCounterparty = []
-						state.matchCounterparty.push(matchCounterpartyInput.value)
-						matchCounterpartyInput.value = ''
-				}
+			if (matchCounterpartyInput.value.trim()) {
+				if (!state.matchCounterparty) state.matchCounterparty = []
+				state.matchCounterparty.push(matchCounterpartyInput.value)
+				matchCounterpartyInput.value = ''
+			}
 		}
 
 		const removeMatchCounterparty = (index: number) => {
@@ -124,29 +136,33 @@
 		}
 
 		const canProceed = computed(() => {
-				if (currentStep.value === 0) {
-						return state.type && state.status && state.relatedBankAccounts.length > 0
-				}
-				return true
+			if (currentStep.value === 0) {
+				return state.type && (state.status && state.relatedBankAccounts && state.relatedBankAccounts.length > 0)
+			}
+			return true
 		})
 
-		const onSubmit = async (event: FormSubmitEvent<RuleForm>) => {
-				try {
-						// Send form data to API
-						console.log('Form submitted:', state)
-						toast.add({
-								title: 'Regel oprettet',
-								description: 'Den nye regel er blevet oprettet.'
-						})
-						open.value = false
-						currentStep.value = 0
-				} catch (error) {
-						toast.add({
-								title: 'Fejl',
-								description: 'Der skete en fejl ved oprettelsen af reglen.',
-								color: 'error'
-						})
-				}
+		const onSubmit = async (event: FormSubmitEvent<Rule>) => {
+			state.accountingAttachmentName = attachments.value?.names,
+			state.accountingAttachmentMimetype = attachments.value?.extensions,
+			state.accountingAttachmentData = attachments.value?.base64
+
+			try {
+				// Send form data to API
+				console.log('Form submitted:', state)
+				toast.add({
+					title: 'Regel oprettet',
+					description: 'Den nye regel er blevet oprettet.'
+				})
+				open.value = false
+				currentStep.value = 0
+			} catch (error) {
+				toast.add({
+					title: 'Fejl',
+					description: 'Der skete en fejl ved oprettelsen af reglen.',
+					color: 'error'
+				})
+			}
 		}
 
 		const handleNext = () => {
@@ -292,9 +308,9 @@
 									<UFormField label="Transaktionstype" name="matchType">
 										<USelectMenu
 											:ui="{ content: 'min-w-fit' }"
-											multiple
 											v-model="state.matchType"
 											:items="transactionTypeOptions"
+											multiple
 											labelKey="label"
 											valueKey="value"
 											placeholder="Vælg transaktionstype"
@@ -355,7 +371,7 @@
 									</UFormField>
 								</div>
 
-								<div class="flex justify-center gap-4">
+								<div class="flex justify-center gap-4" mb-6>
 									<UFormField label="Notifikation til" name="accountingNotifyTo">
 										<UInput
 											v-model="state.accountingNotifyTo"
@@ -372,6 +388,10 @@
 											placeholder="Valgfri notering"
 										/>
 									</UFormField>
+								</div>
+
+								<div class="flex justify-center gap-4">
+									<RulesFileUpload @update="handleAttachmentUpdate" />
 								</div>
 							</div>
 						</template>

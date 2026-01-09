@@ -30,10 +30,10 @@ export interface Rule {
     relatedBankAccounts: Array<BankAccount['id']>
     lastUsed: Run['bookingDate'] | undefined
     createdAt: Date
-    updatedAt: Date | undefined
+    updatedAt: Date
     matchText: Array<string> | undefined
     matchCounterparty: Array<string> | undefined
-    matchType: Array<string> | undefined
+    matchType: Array<TransactionType['id']> | undefined
     matchAmountMin: number | undefined
     matchAmountMax: number | undefined
     accountingPrimaryAccount: string | undefined // Artskonto i Opus
@@ -44,9 +44,9 @@ export interface Rule {
     accountingCprNumber: string | undefined
     accountingNotifyTo: string | undefined
     accountingNote: string | undefined
-    accountingAttachmentName: string | undefined
-    accountingAttachmentMimetype: string | undefined
-    accountingAttachmentData: string | undefined // Base64 encoded
+    accountingAttachmentName: Array<string> | undefined
+    accountingAttachmentMimetype: Array<string> | undefined
+    accountingAttachmentData: Array<string> | undefined // Base64 encoded
     ruleTags: Array<RuleTag> | undefined
 }
 

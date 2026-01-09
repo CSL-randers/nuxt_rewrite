@@ -3,25 +3,28 @@ import { RuleStatusValues, RuleTypeValues, CprTypeValues } from '~/types'
 
 // Her antager vi, at RuleStatus, RuleType, CprType er string unions
 export const ruleFormSchema = z.object({
-  type: z.enum(RuleTypeValues),           // f.eks. ['standard','undtagelse','engangs']
-  status: z.enum(RuleStatusValues),       // f.eks. ['aktiv','inaktiv']
-  relatedBankAccounts: z.array(z.string()).min(1), // skal matche state.relatedBankAccounts
+  createdAt: z.date(),
+  updatedAt: z.date(),
+  
+  type: z.enum(RuleTypeValues),
+  status: z.enum(RuleStatusValues),
+  relatedBankAccounts: z.array(z.string()).min(1),
 
-  matchText: z.array(z.string()).nullable(),
-  matchCounterparty: z.array(z.string()).nullable(),
-  matchType: z.string().nullable(), // tillad null så det kan cleares
+  matchText: z.array(z.string()).optional(),
+  matchCounterparty: z.array(z.string()).optional(),
+  matchType: z.array(z.string()).optional(),
 
-  matchAmountMin: z.number().nullable(),
-  matchAmountMax: z.number().nullable(),
+  matchAmountMin: z.number().optional(),
+  matchAmountMax: z.number().optional(),
 
-  accountingPrimaryAccount: z.string().nullable(),
-  accountingSecondaryAccount: z.string().nullable(),
-  accountingTertiaryAccount: z.string().nullable(),
+  accountingPrimaryAccount: z.string().optional(),
+  accountingSecondaryAccount: z.string().optional(),
+  accountingTertiaryAccount: z.string().optional(),
 
-  accountingText: z.string().nullable(),
+  accountingText: z.string().optional(),
 
   accountingCprType: z.enum(CprTypeValues),
-  accountingCprNumber: z.string().nullable(),
+  accountingCprNumber: z.string().optional(),
 
   accountingNotifyTo: z
     .string()
@@ -31,7 +34,11 @@ export const ruleFormSchema = z.object({
     
   accountingNote: z.string().nullable(),
 
-  ruleTags: z.array(z.string()).nullable()
+  accountingAttachmentName: z.array(z.string()).optional(),
+  accountingAttachmentMimetype: z.array(z.string()).optional(),
+  accountingAttachmentData: z.array(z.string()).optional(),
+
+  ruleTags: z.array(z.string()).optional()
 })
 
 export type RuleFormSchema = z.infer<typeof ruleFormSchema>
