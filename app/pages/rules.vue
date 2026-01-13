@@ -3,7 +3,7 @@ import type { TableColumn } from '@nuxt/ui'
 import { upperFirst } from 'scule'
 import { flattenBy, getPaginationRowModel } from '@tanstack/table-core'
 import type { Row } from '@tanstack/table-core'
-import type { Rule, BankAccount } from '~/types'
+import type { Rule, BankAccount } from '~/lib/db/schema.ts'
 import useFlattenArray from '~/composables/useFlattenArray'
 
 type RuleRow = Rule & {

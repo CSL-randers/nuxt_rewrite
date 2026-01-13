@@ -1,5 +1,5 @@
 <script lang="ts" setup>
-    import type { Transaction } from '~/types'
+    import type { Transaction } from '~/lib/db/schema.ts'
     import useFlattenArray from '~/composables/useFlattenArray'
     
     const { data } = await useFetch<Transaction[]>('/api/transactions', {

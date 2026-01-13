@@ -1,7 +1,7 @@
 <script setup lang="ts">
     import { CalendarDate, DateFormatter, getLocalTimeZone } from '@internationalized/date'
     import type { TableColumn } from '@nuxt/ui'
-    import type { Run, RunStatus } from '~/types'
+    import type { Run, RunStatus } from '~/lib/db/schema.ts'
     import useFlattenArray from '~/composables/useFlattenArray'
 
     const { data, status } = await useFetch<Run[]>('/api/runs', {

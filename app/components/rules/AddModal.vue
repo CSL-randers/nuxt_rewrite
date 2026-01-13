@@ -1,7 +1,6 @@
 <script setup lang="ts">
 		import type { FormSubmitEvent } from '@nuxt/ui'
-		import type { BankAccount, TransactionType, Rule, RuleStatus, RuleType, CprType } from '~/types'
-		import type { RuleFormSchema } from '~/schemas/rules.schema'
+		import type { BankAccount, TransactionType, Rule, RuleStatus, RuleType, CprType, RuleFormSchema } from '~/lib/db/schema.ts'
 
 		const open = ref(false)
 		const currentStep = ref(0)

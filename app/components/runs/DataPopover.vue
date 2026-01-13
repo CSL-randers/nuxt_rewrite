@@ -1,5 +1,5 @@
 <script setup lang="ts">
-    import type { Run } from '~/types'
+    import type { Run } from '~/lib/db/schema.ts'
 
     interface Props {
         type: 'error' | 'transactions' | 'docs'
