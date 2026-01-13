@@ -6,6 +6,9 @@
 		const open = ref(false)
 		const currentStep = ref(0)
 		const toast = useToast()
+    const { handleSubmit } = useForm({
+      
+    })
 
 		const steps = [
 			{ id: 'basic', title: 'Basis', description: 'Vælg type, status og bankkonto' },

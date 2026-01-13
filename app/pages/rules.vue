@@ -3,8 +3,12 @@ import type { TableColumn } from '@nuxt/ui'
 import { upperFirst } from 'scule'
 import { flattenBy, getPaginationRowModel } from '@tanstack/table-core'
 import type { Row } from '@tanstack/table-core'
-import type { Rule } from '~/types'
+import type { Rule, BankAccount } from '~/types'
 import useFlattenArray from '~/composables/useFlattenArray'
+
+type RuleRow = Rule & {
+  bankAccountNames: string[]
+}
 
 const UButton = resolveComponent('UButton')
 const UBadge = resolveComponent('UBadge')
@@ -19,15 +23,28 @@ const table = useTemplateRef('table')
 
 const globalFilterValue = ref('')
 
-const { data, status } = await useFetch<Rule[]>('/api/rules', {
+const { data: rules, status } = await useFetch<Rule[]>('/api/rules', {
   key: 'rules'
 })
 
-// Normaliserer data fra API'et til en array af regler
-const rows = computed<Rule[]>(() => useFlattenArray<Rule>(data));
+const { data: bankAccounts } = await useFetch<BankAccount[]>('/api/bank-accounts', {
+  key: 'bankaccounts'
+})
+
+// Normalise data from the API to an array of rules and add names to related bank accounts
+const rows = computed<RuleRow[]>(() => {
+  const flatRules = useFlattenArray<Rule>(rules.value || [])
+
+  return flatRules.map(rule => ({
+    ...rule,
+    bankAccountNames: (rule.relatedBankAccounts ?? [])
+      .map(id => bankAccounts.value?.find(acc => acc.id === id)?.name)
+      .filter(Boolean) as string[]
+  }))
+})
 
 // Items i dropdown-menu for hver række
-function getRowItems(row: Row<Rule>) {
+function getRowItems(row: Row<RuleRow>) {
   return [
     {
       type: 'label',
@@ -57,15 +74,16 @@ function getRowItems(row: Row<Rule>) {
 const columnVisibility = ref({
   status: false,
   type: false,
-  bankAccountName: false,
+  relatedBankAccounts: false,
   matchText_flat: false,
   matchCounterparty_flat: false,
   ruleTags_flat: false
 })
 
-const columns: TableColumn<Rule>[] = [
+const columns: TableColumn<RuleRow>[] = [
   { // Selekteringskolonne
-    id: 'select',
+    id: 'Vælg',
+    enableHiding: false,
     header: ({ table }) =>
       h(UCheckbox, {
         'modelValue': table.getIsSomePageRowsSelected()
@@ -86,8 +104,72 @@ const columns: TableColumn<Rule>[] = [
     accessorKey: 'id',
     header: 'ID',
   },
+  { // Ruletags (badges)
+    accessorKey: 'tags',
+    header: 'Tags',
+    cell: ({ row }) => {
+        return h(
+            'div',
+            { class: classBadgeColumn },
+            row.original.ruleTags?.map((tag: any) =>
+                h(UBadge, { class: 'capitalize', variant: 'solid', color: 'neutral' }, () =>
+                    tag.name
+                )
+            )
+        )
+    }
+  },
+  { // Type (hidden, kun til filtrering)
+    accessorKey: 'type',
+    enableHiding: false,
+    cell: ({ row }) => row.original.type
+  },
+  { // Status (hidden, kun til filtrering)
+    accessorKey: 'status',
+    enableHiding: false,
+    cell: ({ row }) => row.original.status
+  },
+  { // Konto (hidden, kun til filtrering)
+    accessorKey: 'relatedBankAccounts',
+    enableHiding: false,
+    cell: ({ row }) => row.original.bankAccountNames.join(', ')
+  },
+  { // Status, Konto og Type
+    id: 'Stamdata',
+    cell: ({ row }) => {
+      const statusColor = {
+        aktiv: 'text-green-600',
+        inaktiv: 'text-red-600'
+      }[row.original.status]
+
+      const typeLabel = {
+        standard: 'Standard',
+        undtagelse: 'Undtagelse',
+        engangs: 'Engangs'
+      }[row.original.type]
+
+      return h('div', { class: classMultiplePropsColumn }, [
+        h('p', { class: 'font-medium' }, [
+          h('span', { class: 'text-highlighted' }, 'Status: '),
+          h('span', { class: statusColor }, row.original.status === 'aktiv' ? 'Aktiv' : 'Inaktiv')
+        ]),
+
+        // Bankkonti
+        h('p', { class: 'font-medium' }, [
+          h('span', { class: 'text-highlighted' }, 'Konti: '),
+          h('span', {}, row.original.bankAccountNames.join(', '))
+        ]),
+
+        // Type
+        h('p', { class: 'font-medium' }, [
+          h('span', { class: 'text-highlighted' }, 'Type: '),
+          h('span', {}, typeLabel)
+        ])
+      ])
+    }
+  },
   { // Søgeord (badges)
-    accessorKey: 'matchText',
+    accessorKey: 'Søgeord',
     header: 'Søgeord',
     cell: ({ row }) => {
       
@@ -108,7 +190,7 @@ const columns: TableColumn<Rule>[] = [
     }
   },
   { // Modpart eller afsender/modtager (badges)
-    accessorKey: 'matchCounterparty',
+    accessorKey: 'Modpart',
     header: 'Modpart',
     cell: ({ row }) => {
       
@@ -120,7 +202,7 @@ const columns: TableColumn<Rule>[] = [
             { 
               class: 'capitalize', 
               variant: 'subtle', 
-              color: 'primary'
+              color: 'secondary'
             }, 
             () => text
           )
@@ -128,66 +210,29 @@ const columns: TableColumn<Rule>[] = [
       )
     }
   },
-  { // Transaktionstype
-    accessorKey: 'matchType',
+  { // Transaktionstype (badges)
+    accessorKey: 'Transaktionstype',
     header: 'Transaktionstype',
-    cell: ({ row }) => row.original.matchType
-  },
-  { // Ruletags (badges)
-    accessorKey: 'ruleTags',
-    header: 'Tags',
     cell: ({ row }) => {
-        return h(
-            'div',
-            { class: classBadgeColumn },
-            row.original.ruleTags?.map((tag: any) =>
-                h(UBadge, { class: 'capitalize', variant: 'subtle', color: 'secondary' }, () =>
-                    tag.name
-                )
-            )
+      
+      return h(
+        'div',
+        { class: classBadgeColumn },
+        row.original.matchType?.map((text: string, index: number) =>
+          h(UBadge, 
+            { 
+              class: 'capitalize', 
+              variant: 'subtle', 
+              color: 'warning'
+            }, 
+            () => text
+          )
         )
-    }
-  },
-  { // Type (hidden, kun til filtrering)
-    accessorKey: 'type',
-    enableHiding: false,
-    cell: ({ row }) => row.original.type
-  },
-  { // Status (hidden, kun til filtrering)
-    accessorKey: 'status',
-    enableHiding: false,
-    cell: ({ row }) => row.original.status
-  },
-  { // Konto (hidden, kun til filtrering)
-    accessorKey: 'bankAccountName',
-    enableHiding: false,
-    cell: ({ row }) => row.original.bankAccountName
-  },
-  { // Status, Konto og Type
-    id: 'statusType',
-    cell: ({ row }) => {
-      const statusColor = {
-        aktiv: 'text-green-600',
-        inaktiv: 'text-red-600'
-      }[row.original.status]
-
-      const typeLabel = {
-        standard: 'Standard',
-        undtagelse: 'Undtagelse',
-        engangs: 'Engangs'
-      }[row.original.type]
-
-      return h('div', { class: classMultiplePropsColumn }, [
-        h('p', { class: 'font-medium' }, [
-          h('span', { class: statusColor }, row.original.status === 'aktiv' ? 'Aktiv' : 'Inaktiv')
-        ]),
-        h('p', { class: 'font-medium text-highlighted' }, `Konto: ${row.original.bankAccountName}`),
-        h('p', { class: 'text-muted' }, `Type: ${typeLabel}`)
-      ])
+      )
     }
   },
   { // Datoer
-    id: 'dates',
+    id: 'Datoer',
     cell: ({ row }) => {
       const formatDate = (date: Date | undefined) => {
         if (!date) return 'N/A'
@@ -199,9 +244,18 @@ const columns: TableColumn<Rule>[] = [
       }
 
       return h('div', { class: classMultiplePropsColumn }, [
-        h('p', { class: 'font-medium text-highlighted' }, `Senest anvendt: ${formatDate(row.original.lastUsed)}`),
-        h('p', { class: 'text-muted' }, `Oprettet: ${formatDate(row.original.createdAt)}`),
-        h('p', { class: 'text-muted' }, `Opdateret: ${formatDate(row.original.updatedAt)}`)
+        h('p', { class: 'font-medium' }, [
+          h('span', { class: 'text-highlighted' }, 'Senest anvendt: '),
+          h('span', {}, formatDate(row.original.lastUsed))
+        ]),
+        h('p', { class: 'font-medium' }, [
+          h('span', { class: 'text-highlighted' }, 'Oprettet: '),
+          h('span', {}, formatDate(row.original.createdAt))
+        ]),
+        h('p', { class: 'font-medium' }, [
+          h('span', { class: 'text-highlighted' }, 'Opdateret: '),
+          h('span', {}, formatDate(row.original.updatedAt))
+        ])
       ])
     }
   },
