@@ -1,6 +1,7 @@
 <script setup lang="ts">
 		import type { FormSubmitEvent } from '@nuxt/ui'
-		import type { BankAccount, TransactionType, Rule, RuleStatus, RuleType, CprType, RuleFormSchema } from '~/lib/db/schema.ts'
+		import type { AccountSelectSchema, TransactionTypeSelectSchema, Rule, RuleStatus, RuleType, CprType, RuleInsertSchema } from '~/lib/db/schema/index'
+    import { ruleTypeEnum } from '~/lib/db/schema/index'
 
 		const open = ref(false)
 		const currentStep = ref(0)
@@ -27,13 +28,13 @@
 			attachments.value = value
 		}
 
-		type BankAccountOption = { label: string, value: string }
+		type AccountOption = { label: string, value: string }
 
-		const { data: rawAccounts } = await useFetch<BankAccount[]>('/api/bank-accounts', {
+		const { data: rawAccounts } = await useFetch<AccountSelectSchema[]>('/api/bank-accounts', {
 			key: 'bankaccounts'
 		})
 
-		const bankAccountOptions = computed<BankAccountOption[]>(() =>
+		const accountOptions = computed<AccountOption[]>(() =>
 			(rawAccounts.value ?? []).map(acc => ({
 				label: acc.name,
 				value: acc.id
@@ -42,7 +43,7 @@
 
 		type TransactionTypeOption = { label: string, value: string }
 
-		const { data: rawTransactionTypes } = await useFetch<TransactionType[]>('/api/transaction-types', {
+		const { data: rawTransactionTypes } = await useFetch<TransactionTypeSelectSchema[]>('/api/transaction-types', {
 			key: 'transactiontypes'
 		})
 
@@ -54,9 +55,7 @@
 		)
 
 		// Form state
-		const state = reactive<Partial<RuleFormSchema>>({
-			createdAt: new Date(),
-			updatedAt: new Date(),
+		const state = reactive<Partial<RuleInsertSchema>>({
 			type: 'standard',
 			status: 'aktiv',
 			relatedBankAccounts: [] as string[],
@@ -75,7 +74,7 @@
 			accountingNote: undefined,
 			ruleTags: undefined,
 			accountingAttachmentName: undefined,
-			accountingAttachmentMimetype: undefined,
+			accountingAttachmentFileExtension: undefined,
 			accountingAttachmentData: undefined
 		})
 

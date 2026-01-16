@@ -3,10 +3,10 @@ import type { TableColumn } from '@nuxt/ui'
 import { upperFirst } from 'scule'
 import { flattenBy, getPaginationRowModel } from '@tanstack/table-core'
 import type { Row } from '@tanstack/table-core'
-import type { Rule, BankAccount } from '~/lib/db/schema.ts'
+import type { RuleSelectSchema, BankAccount } from '~/lib/db/schema/index'
 import useFlattenArray from '~/composables/useFlattenArray'
 
-type RuleRow = Rule & {
+type RuleRow = RuleSelectSchema & {
   bankAccountNames: string[]
 }
 
@@ -23,7 +23,7 @@ const table = useTemplateRef('table')
 
 const globalFilterValue = ref('')
 
-const { data: rules, status } = await useFetch<Rule[]>('/api/rules', {
+const { data: rules, status } = await useFetch<RuleSelectSchema[]>('/api/rules', {
   key: 'rules'
 })
 
@@ -33,7 +33,7 @@ const { data: bankAccounts } = await useFetch<BankAccount[]>('/api/bank-accounts
 
 // Normalise data from the API to an array of rules and add names to related bank accounts
 const rows = computed<RuleRow[]>(() => {
-  const flatRules = useFlattenArray<Rule>(rules.value || [])
+  const flatRules = useFlattenArray<RuleSelectSchema>(rules.value || [])
 
   return flatRules.map(rule => ({
     ...rule,

@@ -1,15 +1,15 @@
 <script lang="ts" setup>
-    import type { Transaction } from '~/lib/db/schema.ts'
+    import type { TransactionSelectSchema } from '~/lib/db/schema/index'
     import useFlattenArray from '~/composables/useFlattenArray'
     
-    const { data } = await useFetch<Transaction[]>('/api/transactions', {
+    const { data } = await useFetch<TransactionSelectSchema[]>('/api/transactions', {
         lazy: true
     })
 
-    const postings = computed<Transaction[]>(() => useFlattenArray<Transaction>(data));
+    const postings = computed<TransactionSelectSchema[]>(() => useFlattenArray<TransactionSelectSchema>(data));
     
-    const postingsByAccount = computed<Record<string, Transaction[]>>(() => {
-        const result: Record<string, Transaction[]> = {}
+    const postingsByAccount = computed<Record<string, TransactionSelectSchema[]>>(() => {
+        const result: Record<string, TransactionSelectSchema[]> = {}
 
         postings.value.forEach(tx => {
             const accountName = tx.bankAccountName || 'Ukendt konto'

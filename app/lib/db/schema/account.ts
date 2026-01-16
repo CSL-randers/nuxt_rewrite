@@ -1,0 +1,17 @@
+import { z } from "zod"
+import { pgTable, text, integer } from "drizzle-orm/pg-core"
+import { createInsertSchema, createUpdateSchema, createSelectSchema } from "drizzle-zod"
+
+export const Account = pgTable('account', {
+  id: text().primaryKey(),
+  name: text().notNull(),
+  statusAccount: integer().notNull()
+})
+
+export const accountInsertSchema = createInsertSchema(Account)
+export const accountUpdateSchema = createUpdateSchema(Account)
+export const accountSelectSchema = createSelectSchema(Account)
+
+export type AccountInsertSchema = z.infer<typeof accountInsertSchema>
+export type AccountUpdateSchema = z.infer<typeof accountUpdateSchema>
+export type AccountSelectSchema = z.infer<typeof accountSelectSchema>

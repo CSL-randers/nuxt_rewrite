@@ -1,4 +1,4 @@
-import type { Rule } from '~/lib/db/schema.ts'
+import type { Rule } from '~/lib/db/schema/schema'
 
 // Mock data for rules
 const rules: Rule[] = [
