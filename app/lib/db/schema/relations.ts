@@ -1,13 +1,5 @@
 import { relations } from "drizzle-orm";
-import { Rule } from "./rule";
-import { RuleTag } from "./ruleTag";
-import { Document } from "./document";
-import { Transaction } from "./transaction";
-import { Run } from "./run";
-import { BankingRequest } from "./bankingRequest";
-import { BankingResponse } from "./bankingResponse";
-import { ErpRequest } from "./erpRequest";
-import { ErpResponse } from "./erpResponse";
+import { Rule, RuleTag, Document, Transaction, Run, BankingRequest, BankingResponse, ErpRequest, ErpResponse } from "./index";
 
 export const ruleRelations = relations(Rule, ({ many }) => ({
   tags: many(RuleTag),

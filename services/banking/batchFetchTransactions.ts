@@ -1,0 +1,116 @@
+import crypto from "crypto";
+import { db } from "~app/lib/db/index";
+import { Account, bankingMetaData } from "~app/lib/db/schema/index";
+import { useFetch } from "#imports"; // Nuxt 3 auto-import
+
+export async function getBankingMetaData() {
+  const meta = await db.select().from(bankingMetaData).limit(1).get();
+  if (!meta) throw new Error("Ingen banking metadata fundet i DB");
+  return meta;
+}
+
+export interface SimpleAccountReportEntry {
+  id?: string;
+  sequence: number;
+  amount: number;
+  balance: number;
+  instructedCurrency?: string;
+  instructedAmount?: number;
+  exchangeRate?: number;
+  batch?: string;
+  debtorBic?: string;
+  debtorAccount?: string;
+  debtorText?: string;
+  debtorMessage?: string;
+  creditorBic?: string;
+  creditorAccount?: string;
+  creditorText?: string;
+  creditorMessage?: string;
+  ocrReference?: string;
+  ocrType?: string;
+  easyAccount?: string;
+  easyAccountType?: string;
+  debtorsPaymentId?: string;
+  primaryReference?: string;
+  employeeNumber?: string;
+  endToEndId?: string;
+  date: { bookingDate: string; valueDate: string };
+  type?: string;
+  text?: string;
+  transactionCodes?: Record<string, any>;
+  debtor?: Record<string, any>;
+  creditor?: Record<string, any>;
+}
+
+// Helper: lav HMAC godkendelse
+export function generateAuthHeader(
+  accountId: string,
+  requestId: string,
+  meta: {
+    serviceProvider: string;
+    servicerProviderId: string;
+    passcode: string;
+  }
+) {
+  const now = new Date().toISOString().replace(/[-:.TZ]/g, "").slice(0, 14);
+  const payload = `${accountId}#${requestId}#${meta.serviceProvider}#${now}`;
+  const hmac = crypto
+    .createHmac("sha256", meta.servicerProviderId)
+    .update(payload)
+    .digest("base64");
+
+  const authObj = {
+    serviceProvider: meta.serviceProvider,
+    account: accountId,
+    time: now,
+    requestId,
+    hash: [{ id: requestId, hash: hmac }],
+  };
+
+  return Buffer.from(JSON.stringify(authObj)).toString("base64");
+}
+
+// Hent kontoudtog for en konto med Nuxt useFetch
+async function fetchTransactionsForAccount(
+  accountId: string,
+  meta: Awaited<ReturnType<typeof getBankingMetaData>>
+): Promise<SimpleAccountReportEntry[]> {
+  const requestId = crypto.randomUUID();
+  const authHeader = generateAuthHeader(accountId, requestId, meta);
+
+  const { data, error } = await useFetch<SimpleAccountReportEntry[]>(
+    `https://api.bankintegration.dk/statement?account=${accountId}`,
+    {
+      headers: {
+        Authorization: authHeader,
+        "Content-Type": "application/json",
+      },
+      method: "GET",
+      server: true, // Sørger for at kaldet kører på serveren
+    }
+  );
+
+  if (error.value) {
+    throw new Error(`Fejl ved hentning af kontoudtog for konto ${accountId}: ${error.value}`);
+  }
+
+  return data.value ?? [];
+}
+
+// Iterer over alle konti og hent transaktioner
+export async function fetchBankTransactions(): Promise<SimpleAccountReportEntry[]> {
+  const accounts = await db.select().from(Account).all();
+  const meta = await getBankingMetaData();
+  const allTransactions: SimpleAccountReportEntry[] = [];
+
+  for (const account of accounts) {
+    try {
+      const tx = await fetchTransactionsForAccount(account.id, meta);
+      allTransactions.push(...tx);
+    } catch (err) {
+      console.error(`Fejl for konto ${account.id}:`, err);
+    }
+  }
+
+  return allTransactions;
+}

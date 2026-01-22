@@ -1,8 +1,7 @@
 import { z } from "zod"
 import { createInsertSchema, createSelectSchema } from "drizzle-zod"
 import { pgTable, text, uuid } from "drizzle-orm/pg-core"
-import { ErpRequest } from "./erpRequest"
-import { Run } from "./run"
+import { ErpRequest, Run } from "./index"
 
 // Table will only be populated with data during batch runs or reruns
 export const ErpResponse = pgTable('erp_response', {

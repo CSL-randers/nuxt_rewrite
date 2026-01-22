@@ -4,7 +4,6 @@ import { createInsertSchema, createUpdateSchema, createSelectSchema } from "driz
 
 export const Account = pgTable('account', {
   id: text().primaryKey(),
-  name: text().notNull(),
   statusAccount: integer().notNull()
 })
 

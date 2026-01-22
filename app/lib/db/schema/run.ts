@@ -6,7 +6,7 @@ import { runStatusEnum } from "./enums"
 // Table will only be populated with data during batch runs and when user books an open items
 export const Run = pgTable('run', {
   id: uuid().defaultRandom().primaryKey(),  
-  bookingDate: date({ mode: "date" }).notNull(),
+  bookingDate: date().notNull(),
   status: runStatusEnum(),
   errors: json().array(),
   transactions: json().array(),

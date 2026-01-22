@@ -1,40 +1,75 @@
 import { z } from "zod"
-import { pgTable, text, date, numeric, integer } from "drizzle-orm/pg-core"
+import { pgTable, text, date, numeric, integer, uuid } from "drizzle-orm/pg-core"
 import { createInsertSchema, createUpdateSchema, createSelectSchema } from "drizzle-zod"
-import { ruleTypeEnum, ruleStatusEnum, cprTypeEnum } from "./enums"
-import { Account } from "./account"
-import { RuleTag } from "./ruleTag"
-import { TransactionType } from "./transactionType"
+import { ruleTypeEnum, ruleStatusEnum, cprTypeEnum, Account, RuleTag } from "./index"
 
 export const Rule = pgTable('rule', {
   id: integer().primaryKey().generatedAlwaysAsIdentity(),
+
+  // Metadata
+  lastUsed: date({ mode: "date" }),
+  createdAt: date({ mode: "date" }),
+  updatedAt: date({ mode: "date" }).defaultNow(),
+  lockedAt: date({ mode: "date" }),
+  lockedBy: text(),
+  currentVersionId: uuid().notNull(),
+
   type: ruleTypeEnum(),
   status: ruleStatusEnum(),
+
+  // Scope
   relatedBankAccounts: text().array().notNull().references(() => Account.id),
-  lastUsed: date({ mode: "date" }),
-  createdAt: date({ mode: "date" }).$default(() => new Date()),
-  updatedAt: date({ mode: "date" }).$default(() => new Date()).$onUpdate(() => new Date()),
+
+  // 🔍 Matching – references
+  matchPrimaryReference: text().array(),
+  matchProviderId: text().array(),
+  matchEndToEndId: text().array(),
+  matchOcrReference: text().array(),
+  matchBatch: text().array(),
+  matchDebtorsPaymentId: text().array(),
+
+  // 🔍 Matching – counterparties & text
+  matchDebtorId: text().array(),
+  matchDebtorName: text().array(),
+  matchCreditorId: text().array(),
+  matchCreditorName: text().array(),
+  matchDebtorText: text().array(),
+  matchCreditorText: text().array(),
   matchText: text().array(),
-  matchCounterparty: text().array(),
-  matchType: text().array().references(() => TransactionType.id),
+
+  // 🔍 Matching – classification
+  matchType: text().array(),
+  matchTxDomain: text().array(),
+  matchTxFamily: text().array(),
+  matchTxSubFamily: text().array(),
+
+  // 🔍 Matching – amount
   matchAmountMin: numeric(),
   matchAmountMax: numeric(),
-  accountingPrimaryAccount: text().notNull(), // Artskonto i Opus
-  accountingSecondaryAccount: text(), // PSP-element i Opus
-  accountingTertiaryAccount: text(), // Omkostningssted i Opus
+
+  // 🧾 Accounting
+  accountingPrimaryAccount: text().notNull(),
+  accountingSecondaryAccount: text(),
+  accountingTertiaryAccount: text(),
   accountingText: text(),
   accountingCprType: cprTypeEnum(),
   accountingCprNumber: text(),
   accountingNotifyTo: text(),
   accountingNote: text(),
+
+  // 📎 Attachments
   accountingAttachmentName: text().array(),
   accountingAttachmentFileExtension: text().array(),
   accountingAttachmentData: text().array(),
-  ruleTags: integer().array().references(() => RuleTag.id),   
+
+  // 🏷️ Tags
+  ruleTags: integer().array().references(() => RuleTag.id),
 })
+
 
 export const ruleInsertSchema = createInsertSchema(Rule, {
   // Add custom Zod refinements here
+  // Limit to own domain
 }).omit({
   id: true,
   createdAt: true,
