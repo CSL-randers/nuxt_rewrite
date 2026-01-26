@@ -3,11 +3,12 @@ import type { TableColumn } from '@nuxt/ui'
 import { upperFirst } from 'scule'
 import { flattenBy, getPaginationRowModel } from '@tanstack/table-core'
 import type { Row } from '@tanstack/table-core'
-import type { RuleSelectSchema, BankAccount } from '~/lib/db/schema/index'
+import type { RuleSelectSchema, Account } from '~/lib/db/schema/index'
+
 import useFlattenArray from '~/composables/useFlattenArray'
 
-type RuleRow = RuleSelectSchema & {
-  bankAccountNames: string[]
+type RuleRow = RuleListDto & {
+  bankAccountIds: string[]
 }
 
 const UButton = resolveComponent('UButton')
@@ -23,23 +24,21 @@ const table = useTemplateRef('table')
 
 const globalFilterValue = ref('')
 
-const { data: rules, status } = await useFetch<RuleSelectSchema[]>('/api/rules', {
+const { data: rules, status } = await useFetch<RuleListDto[]>('/api/rules', {
   key: 'rules'
 })
 
-const { data: bankAccounts } = await useFetch<BankAccount[]>('/api/bank-accounts', {
+const { data: bankAccounts } = await useFetch<Account[]>('/api/bank-accounts', {
   key: 'bankaccounts'
 })
 
 // Normalise data from the API to an array of rules and add names to related bank accounts
 const rows = computed<RuleRow[]>(() => {
-  const flatRules = useFlattenArray<RuleSelectSchema>(rules.value || [])
+  const flatRules = useFlattenArray<RuleListDto>(rules.value || [])
 
   return flatRules.map(rule => ({
     ...rule,
-    bankAccountNames: (rule.relatedBankAccounts ?? [])
-      .map(id => bankAccounts.value?.find(acc => acc.id === id)?.name)
-      .filter(Boolean) as string[]
+    bankAccountIds: rule.relatedBankAccounts
   }))
 })
 
@@ -75,8 +74,9 @@ const columnVisibility = ref({
   status: false,
   type: false,
   relatedBankAccounts: false,
-  matchText_flat: false,
-  matchCounterparty_flat: false,
+  references_flat: false,
+  counterparties_flat: false,
+  classification_flat: false,
   ruleTags_flat: false
 })
 
@@ -111,10 +111,8 @@ const columns: TableColumn<RuleRow>[] = [
         return h(
             'div',
             { class: classBadgeColumn },
-            row.original.ruleTags?.map((tag: any) =>
-                h(UBadge, { class: 'capitalize', variant: 'solid', color: 'neutral' }, () =>
-                    tag.name
-                )
+            row.original.ruleTags?.map(tag =>
+                h(UBadge, { class: 'capitalize', variant: 'solid', color: 'neutral' }, () => tag)
             )
         )
     }
@@ -132,35 +130,23 @@ const columns: TableColumn<RuleRow>[] = [
   { // Konto (hidden, kun til filtrering)
     accessorKey: 'relatedBankAccounts',
     enableHiding: false,
-    cell: ({ row }) => row.original.bankAccountNames.join(', ')
+    cell: ({ row }) => row.original.bankAccountIds.join(', ')
   },
-  { // Status, Konto og Type
+  { // Stamdata
     id: 'Stamdata',
     cell: ({ row }) => {
-      const statusColor = {
-        aktiv: 'text-green-600',
-        inaktiv: 'text-red-600'
-      }[row.original.status]
-
-      const typeLabel = {
-        standard: 'Standard',
-        undtagelse: 'Undtagelse',
-        engangs: 'Engangs'
-      }[row.original.type]
+      const statusColor = { aktiv: 'text-green-600', inaktiv: 'text-red-600' }[row.original.status]
+      const typeLabel = { standard: 'Standard', undtagelse: 'Undtagelse', engangs: 'Engangs' }[row.original.type]
 
       return h('div', { class: classMultiplePropsColumn }, [
         h('p', { class: 'font-medium' }, [
           h('span', { class: 'text-highlighted' }, 'Status: '),
           h('span', { class: statusColor }, row.original.status === 'aktiv' ? 'Aktiv' : 'Inaktiv')
         ]),
-
-        // Bankkonti
         h('p', { class: 'font-medium' }, [
           h('span', { class: 'text-highlighted' }, 'Konti: '),
-          h('span', {}, row.original.bankAccountNames.join(', '))
+          h('span', {}, row.original.bankAccountIds.join(', '))
         ]),
-
-        // Type
         h('p', { class: 'font-medium' }, [
           h('span', { class: 'text-highlighted' }, 'Type: '),
           h('span', {}, typeLabel)
@@ -168,68 +154,35 @@ const columns: TableColumn<RuleRow>[] = [
       ])
     }
   },
-  { // Søgeord (badges)
-    accessorKey: 'Søgeord',
+  { // Matching references
+    accessorKey: 'matching.references',
     header: 'Søgeord',
-    cell: ({ row }) => {
-      
-      return h(
-        'div',
-        { class: classBadgeColumn },
-        row.original.matchText?.map((text: string, index: number) =>
-          h(UBadge, 
-            { 
-              class: 'capitalize', 
-              variant: 'subtle', 
-              color: 'primary'
-            }, 
-            () => text
-          )
+    cell: ({ row }) =>
+      h('div', { class: classBadgeColumn },
+        row.original.matching.references.map(text =>
+          h(UBadge, { class: 'capitalize', variant: 'subtle', color: 'primary' }, () => text)
         )
       )
-    }
   },
-  { // Modpart eller afsender/modtager (badges)
-    accessorKey: 'Modpart',
+  { // Matching counterparties
+    accessorKey: 'matching.counterparties',
     header: 'Modpart',
-    cell: ({ row }) => {
-      
-      return h(
-        'div',
-        { class: classBadgeColumn },
-        row.original.matchCounterparty?.map((text: string, index: number) =>
-          h(UBadge, 
-            { 
-              class: 'capitalize', 
-              variant: 'subtle', 
-              color: 'secondary'
-            }, 
-            () => text
-          )
+    cell: ({ row }) =>
+      h('div', { class: classBadgeColumn },
+        row.original.matching.counterparties.map(text =>
+          h(UBadge, { class: 'capitalize', variant: 'subtle', color: 'secondary' }, () => text)
         )
       )
-    }
   },
-  { // Transaktionstype (badges)
-    accessorKey: 'Transaktionstype',
+  { // Matching classification
+    accessorKey: 'matching.classification',
     header: 'Transaktionstype',
-    cell: ({ row }) => {
-      
-      return h(
-        'div',
-        { class: classBadgeColumn },
-        row.original.matchType?.map((text: string, index: number) =>
-          h(UBadge, 
-            { 
-              class: 'capitalize', 
-              variant: 'subtle', 
-              color: 'warning'
-            }, 
-            () => text
-          )
+    cell: ({ row }) =>
+      h('div', { class: classBadgeColumn },
+        row.original.matching.classification.map(text =>
+          h(UBadge, { class: 'capitalize', variant: 'subtle', color: 'warning' }, () => text)
         )
       )
-    }
   },
   { // Datoer
     id: 'Datoer',
@@ -259,24 +212,27 @@ const columns: TableColumn<RuleRow>[] = [
       ])
     }
   },
-  { // matchText_flat (hidden, kun til filtrering)
-    id: 'matchText_flat',
-    accessorFn: (row: Rule) =>
-      Array.isArray(row.matchText) ? row.matchText.join(' ') : (row.matchText ?? ''),
+  { // Match-felter til filtrering
+    id: 'references_flat',
+    accessorFn: row => row.matching.references.join(' '),
     enableHiding: false,
     cell: () => undefined
   },
-  { // matchCounterparty_flat (hidden, kun til filtrering)
-    id: 'matchCounterparty_flat',
-    accessorFn: (row: Rule) =>
-      Array.isArray(row.matchCounterparty) ? row.matchCounterparty.join(' ') : (row.matchCounterparty ?? ''),
+  {
+    id: 'counterparties_flat',
+    accessorFn: row => row.matching.counterparties.join(' '),
     enableHiding: false,
     cell: () => undefined
   },
-  { // ruleTags_flat (hidden, kun til filtrering)
+  {
+    id: 'classification_flat',
+    accessorFn: row => row.matching.classification.join(' '),
+    enableHiding: false,
+    cell: () => undefined
+  },
+  {
     id: 'ruleTags_flat',
-    accessorFn: (row: Rule) =>
-      Array.isArray(row.ruleTags) ? row.ruleTags.map((t: any) => t?.name).filter(Boolean).join(' ') : '',
+    accessorFn: row => row.ruleTags?.join(' ') ?? '',
     enableHiding: false,
     cell: () => undefined
   },
@@ -360,7 +316,7 @@ watch(() => typeFilter.value, (newVal) => {
 
 const pagination = ref({
   pageIndex: 0,
-  pageSize: 15
+  pageSize: 20
 })
 </script>
 

@@ -1,11 +1,11 @@
-import type { BankAccount } from "~/types"
+import type { AccountInsertSchema } from '~/lib/db/schema/index'
 
     const bankAccounts = [
-      { id: 'DK2000945604564-DKK', name: 'Hovedkonto', statusAccount: 90599999 },
-      { id: 'DK2000945604565-DKK', name: 'Mellerup', statusAccount: 90599999 },
-      { id: 'DK2000945604566-DKK', name: 'Kasseordning', statusAccount: 90599999 },
-      { id: 'DK2000945604567-DKK', name: 'Projektfond', statusAccount: 90599999 }
-    ] as BankAccount[]
+      { id: 'DK2000945604564-DKK', statusAccount: 90599999 },
+      { id: 'DK2000945604565-DKK', statusAccount: 90599999 },
+      { id: 'DK2000945604566-DKK', statusAccount: 90599999 },
+      { id: 'DK2000945604567-DKK', statusAccount: 90599999 }
+    ] as AccountInsertSchema[]
 
 export default cachedEventHandler(
   async (event) => {
