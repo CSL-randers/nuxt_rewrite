@@ -2,20 +2,27 @@
 import type { FormSubmitEvent } from '@nuxt/ui'
 import type {
   AccountSelectSchema,
-  TransactionTypeSelectSchema,
-  Rule,
+  RuleDraftSchema,
   RuleStatus,
   RuleType,
   CprType,
-  RuleInsertSchema,
-  MatchStepEntry
+  MatchField,
+  MatchEntry,
+  MatchGate,
+  MatchCategory
 } from '~/lib/db/schema/index'
-import { ruleTypeEnum, matchCategories } from '~/lib/db/schema/index'
+import {
+  ruleTypeEnum,
+  ruleStatusEnum,
+  cprTypeEnum,
+  matchCategories,
+  matchCategoryColumns,
+  mapMatchesToDbArrays
+} from '~/lib/db/schema/index'
 
 const open = ref(false)
 const currentStep = ref(0)
 const toast = useToast()
-const { handleSubmit } = useForm({})
 
 const steps = [
   { id: 'basic', title: 'Basis', description: 'Vælg type, status og bankkonto' },
@@ -23,45 +30,61 @@ const steps = [
   { id: 'accounting', title: 'Kontering', description: 'Angiv oplysninger relevant for bogføringen' }
 ]
 
-// -------------------- MATCH STEP --------------------
-const matches = ref<MatchStepEntry[]>([])
+// ---------------------
+// Match object handlers
+// ---------------------
+const matches = ref<MatchEntry[]>([])
 
-// Tilgængelige kolonner per kategori
-const matchColumnsByCategory: Record<string, string[]> = {
-  references: ['matchText','matchPrimaryReference','matchId','matchBatch','matchEndToEndId','matchOcrReference','matchDebtorsPaymentId','matchDebtorText','matchDebtorMessage','matchCreditorText','matchCreditorMessage'],
-  counterparties: ['matchDebtorId','matchDebtorName','matchCreditorId','matchCreditorName'],
-  classification: ['matchType','matchTxDomain','matchTxFamily','matchTxSubFamily']
+function initCategoryRecord<T>(
+  initial: () => T
+): Record<MatchCategory, T> {
+  const record = {} as Record<MatchCategory, T>
+  for (const category of matchCategories) {
+    record[category] = initial()
+  }
+  return record
 }
 
-// Midlertidige inputs for hver kategori
-const matchInputs = reactive<Record<string,string>>(
-  Object.fromEntries(matchCategories.map(c => [c, '']))
+const selectedColumns = reactive(
+  initCategoryRecord<MatchField[]>(() => [])
 )
 
-// Valgte kolonner per kategori
-const selectedColumns = reactive<Record<string,string[]>>(
-  Object.fromEntries(matchCategories.map(c => [c, []]))
+const matchInputs = reactive(
+  initCategoryRecord<string>(() => '')
 )
 
-// Valgt gate per kategori
-const selectedGates = reactive<Record<string,'AND'|'OR'>>(
-  Object.fromEntries(matchCategories.map(c => [c, 'AND']))
+const selectedGates = reactive(
+  initCategoryRecord<MatchGate>(() => 'OG')
 )
 
-const addMatchEntry = (category: typeof matchCategories[number]) => {
-  const value = matchInputs[category]
+const addMatchEntry = (category: MatchCategory) => {
+  const value = matchInputs[category].trim()
+  if (!value) return
+
   const fields = selectedColumns[category]
   const gate = selectedGates[category]
-  if (!value.trim() || fields.length === 0) return
-  matches.value.push({ category, value, fields, gate })
+
+  const entry: MatchEntry = {
+    category,
+    value,
+    gate,
+    ...(fields.length > 0 ? { fields } : {})
+  }
+
+  matches.value.push(entry)
+
   matchInputs[category] = ''
+  selectedColumns[category] = []
+  selectedGates[category] = 'OG'
 }
 
 const removeMatchEntry = (index: number) => {
   matches.value.splice(index, 1)
 }
 
-// -------------------- ACCOUNTING & BASIC --------------------
+// ------------------
+// Attachment helpers
+// ------------------
 type AttachmentPayload = {
   names: string[]
   extensions: string[]
@@ -72,87 +95,89 @@ const handleAttachmentUpdate = (value: AttachmentPayload | null) => {
   attachments.value = value
 }
 
-type AccountOption = { label: string, value: string }
-const { data: rawAccounts } = await useFetch<AccountSelectSchema[]>('/api/bank-accounts', { key: 'bankaccounts' })
-const accountOptions = computed<AccountOption[]>(() =>
-  (rawAccounts.value ?? []).map(acc => ({ label: acc.name, value: acc.id }))
-)
+// --------------
+// State creation
+// --------------
+type RuleDraftUiState = Omit<RuleDraftSchema, 'matches'> & {
+  matches?: MatchEntry[]
+}
 
-type TransactionTypeOption = { label: string, value: string }
-const { data: rawTransactionTypes } = await useFetch<TransactionTypeSelectSchema[]>('/api/transaction-types', { key: 'transactiontypes' })
-const transactionTypeOptions = computed<TransactionTypeOption[]>(() =>
-  (rawTransactionTypes.value ?? []).map(tt => ({ label: tt.id, value: tt.id }))
-)
-
-// Form state
-const state = reactive<Partial<RuleInsertSchema>>({
-  type: 'standard',
-  status: 'aktiv',
-  relatedBankAccounts: [] as string[],
-  matchText: [],
-  matchCounterparty: [],
-  matchType: [],
-  matchAmountMin: undefined,
-  matchAmountMax: undefined,
+const state = reactive<Partial<RuleDraftUiState>>({
+  type: 'standard' as RuleType,
+  status: 'aktiv' as RuleStatus,
+  relatedBankAccounts: [],
   accountingPrimaryAccount: undefined,
   accountingSecondaryAccount: undefined,
   accountingTertiaryAccount: undefined,
   accountingText: undefined,
-  accountingCprType: 'ingen',
+  accountingCprType: 'ingen' as CprType,
   accountingCprNumber: undefined,
   accountingNotifyTo: undefined,
   accountingNote: undefined,
-  ruleTags: undefined,
-  accountingAttachmentName: undefined,
-  accountingAttachmentFileExtension: undefined,
-  accountingAttachmentData: undefined
+  accountingAttachmentName: null,
+  accountingAttachmentFileExtension: null,
+  accountingAttachmentData: null,
+  ruleTags: null
 })
 
-watch(
-  () => state,
-  (newVal) => console.log('State changed:', newVal),
-  { deep: true }
+// ------------------------------------------
+// Options to USelect og USelectMenu elements
+// ------------------------------------------
+type AccountOption = { label: string, value: string }
+const { data: rawAccounts } = await useFetch<AccountSelectSchema[]>('/api/bank-accounts', { key: 'bankaccounts' })
+const accountOptions = computed<AccountOption[]>(() =>
+  (rawAccounts.value ?? []).map(acc => ({
+    label: acc.id,
+    value: acc.id
+  }))
 )
 
-const typeOptions = [
-  { label: 'Standard', value: 'standard' },
-  { label: 'Undtagelse', value: 'undtagelse' },
-  { label: 'Engangs', value: 'engangs' }
-] satisfies { label: string; value: RuleType }[]
+const typeOptions = Object.values(ruleTypeEnum).map(value => ({
+  label: value.charAt(0).toUpperCase() + value.slice(1), // gør første bogstav stort
+  value
+})) satisfies { label: string; value: RuleType }[]
 
-const statusOptions = [
-  { label: 'Aktiv', value: 'aktiv' },
-  { label: 'Inaktiv', value: 'inaktiv' }
-] satisfies { label: string; value: RuleStatus }[]
+const statusOptions = Object.values(ruleStatusEnum).map(value => ({
+  label: value.charAt(0).toUpperCase() + value.slice(1),
+  value
+})) satisfies { label: string; value: RuleStatus }[]
 
-const cprTypeOptions = [
-  { label: 'Ingen', value: 'ingen' },
-  { label: 'Statisk', value: 'statisk' },
-  { label: 'Dynamisk', value: 'dynamisk' }
-] satisfies { label: string; value: CprType }[]
+const cprTypeOptions = Object.values(cprTypeEnum).map(value => ({
+  label: value.charAt(0).toUpperCase() + value.slice(1),
+  value
+})) satisfies { label: string; value: CprType }[]
 
+// ---------------
+// Step validation
+// ---------------
 const canProceed = computed(() => {
   if (currentStep.value === 0) {
-    return state.type && state.status && state.relatedBankAccounts?.length > 0
+    return state.type && state.status && state.relatedBankAccounts && state.relatedBankAccounts?.length > 0
   }
   return true
 })
 
-const onSubmit = async (event: FormSubmitEvent<Rule>) => {
+const handleNext = () => { if (currentStep.value < steps.length - 1) currentStep.value++ }
+const handlePrev = () => { if (currentStep.value > 0) currentStep.value-- }
+
+const onSubmit = async (event: FormSubmitEvent<RuleDraftSchema>) => {
   state.accountingAttachmentName = attachments.value?.names
   state.accountingAttachmentFileExtension = attachments.value?.extensions
   state.accountingAttachmentData = attachments.value?.base64
 
-  // Her kan du mappe matches til DB columns, fx via mapMatchesToDbArrays(matches.value)
-  console.log('Form submitted:', state, matches.value)
+  const dbMatches = mapMatchesToDbArrays(matches.value)
+
+  const payload = {
+    ...state,
+    ...dbMatches
+  }
+
+  console.log('Form submitted:', payload)
 
   toast.add({ title: 'Regel oprettet', description: 'Den nye regel er blevet oprettet.' })
   open.value = false
   currentStep.value = 0
 }
-
-const handleNext = () => { if (currentStep.value < steps.length - 1) currentStep.value++ }
-const handlePrev = () => { if (currentStep.value > 0) currentStep.value-- }
 </script>
 
 <template>
@@ -169,11 +194,11 @@ const handlePrev = () => { if (currentStep.value > 0) currentStep.value-- }
             <template v-if="item.id === 'basic'">
               <div class="flex justify-between gap-4">
                 <UFormField label="Regeltype" name="type" required>
-                  <USelect v-model="state.type" :items="typeOptions" labelKey="label" value-attribute="value" placeholder="Vælg regeltype" />
+                  <USelect v-model="state.type as RuleType" :items="typeOptions" labelKey="label" valueKey="value" placeholder="Vælg regeltype" />
                 </UFormField>
 
                 <UFormField label="Status" name="status" required>
-                  <USelect v-model="state.status" :items="statusOptions" labelKey="label" value-attribute="value" placeholder="Vælg status" />
+                  <USelect v-model="state.status as RuleStatus" :items="statusOptions" labelKey="label" valueKey="value" placeholder="Vælg status" />
                 </UFormField>
 
                 <UFormField label="Bankkonto" name="relatedBankAccounts" required>
@@ -195,7 +220,7 @@ const handlePrev = () => { if (currentStep.value > 0) currentStep.value-- }
 
                   <!-- Kolonnevalg -->
                   <div class="flex flex-wrap gap-2 mb-2">
-                    <label v-for="col in matchColumnsByCategory[category]" :key="col" class="inline-flex items-center gap-1 cursor-pointer">
+                    <label v-for="col in matchCategoryColumns[category]" :key="col" class="inline-flex items-center gap-1 cursor-pointer">
                       <input type="checkbox" v-model="selectedColumns[category]" :value="col" />
                       {{ col }}
                     </label>
@@ -204,10 +229,10 @@ const handlePrev = () => { if (currentStep.value > 0) currentStep.value-- }
                   <!-- Gate -->
                   <div class="flex gap-4 mb-2">
                     <label class="inline-flex items-center gap-1">
-                      <input type="radio" v-model="selectedGates[category]" value="AND" /> AND
+                      <input type="radio" v-model="selectedGates[category]" value="OG" /> OG
                     </label>
                     <label class="inline-flex items-center gap-1">
-                      <input type="radio" v-model="selectedGates[category]" value="OR" /> OR
+                      <input type="radio" v-model="selectedGates[category]" value="ELLER" /> ELLER
                     </label>
                   </div>
 
@@ -224,8 +249,80 @@ const handlePrev = () => { if (currentStep.value > 0) currentStep.value-- }
 
             <!-- ACCOUNTING STEP -->
             <template v-if="item.id === 'accounting'">
-              <!-- behold din eksisterende accounting template -->
-            </template>
+							<div class="space-y-4">
+								<div class="flex justify-center flex-wrap gap-4 mb-6">
+									<UFormField label="Primær konto" name="accountingPrimaryAccount" required>
+										<UInput
+											v-model="state.accountingPrimaryAccount"
+											placeholder="Artskonto i Opus"
+										/>
+									</UFormField>
+									<UFormField label="Sekundær konto" name="accountingSecondaryAccount">
+										<UInput
+											v-model="state.accountingSecondaryAccount"
+											placeholder="PSP-element i Opus"
+										/>
+									</UFormField>
+									<UFormField label="Tertiær konto" name="accountingTertiaryAccount">
+										<UInput
+											v-model="state.accountingTertiaryAccount"
+											placeholder="Omkostningssted i Opus"
+										/>
+									</UFormField>
+								</div>
+
+								<div class="flex justify-center gap-4 mb-6">
+									<UFormField label="Posteringstekst" name="accountingText">
+										<UInput
+											v-model="state.accountingText"
+											placeholder="Valgfri"
+										/>
+									</UFormField>
+								</div>
+
+								<div class="flex justify-center gap-4 mb-6">
+									<UFormField label="CPR-type" name="accountingCprType">
+										<USelectMenu
+											:ui="{ content: 'min-w-fit' }"
+											v-model="state.accountingCprType as CprType"
+											:items="cprTypeOptions"
+											labelKey="label"
+											valueKey="value"
+											placeholder="Vælg CPR-type"
+										/>
+									</UFormField>
+									<UFormField label="CPR-nummer" name="accountingCprNumber">
+										<UInput
+											v-model="state.accountingCprNumber"
+											:disabled="state.accountingCprType !== 'statisk'"
+										/>
+									</UFormField>
+								</div>
+
+								<div class="flex justify-center gap-4" mb-6>
+									<UFormField label="Notifikation til" name="accountingNotifyTo">
+										<UInput
+											v-model="state.accountingNotifyTo"
+											type="email"
+											placeholder="f.eks. csl@randers.dk"
+										/>
+									</UFormField>
+								</div>
+
+								<div class="flex justify-center gap-4">
+									<UFormField label="Noter" name="accountingNote">
+										<UTextarea
+											v-model="state.accountingNote"
+											placeholder="Valgfri notering"
+										/>
+									</UFormField>
+								</div>
+
+								<div class="flex justify-center gap-4">
+									<RulesFileUpload @update="handleAttachmentUpdate" />
+								</div>
+							</div>
+						</template>
           </template>
         </UStepper>
 

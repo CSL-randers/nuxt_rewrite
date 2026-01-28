@@ -1,46 +1,45 @@
 import { defineEventHandler, readBody } from 'h3'
-import { Rule, ruleInsertSchema, mapMatchesToDbArrays, matchStepInsertSchema, MatchStepInsertSchema } from '~/lib/db/schema/index'
+import { createInsertSchema } from 'drizzle-zod'
+import { Rule, mapMatchesToDbArrays, ruleDraftSchema } from '~/lib/db/schema/index'
+import type { RuleDraftSchema } from '~/lib/db/schema/index'
 import db from '~/lib/db'
 
-// Intern helper, som du allerede har
-async function createRule(input: {
-  basicStep: any,
-  matchStep: MatchStepInsertSchema,
-  accountingStep: any
-}) {
-  // Valider frontend input
-  const validatedMatch = matchStepInsertSchema.parse(input.matchStep)
+export function compileRuleDraftToDb(draft: RuleDraftSchema) {
+  const matchColumns = mapMatchesToDbArrays(draft.matches)
 
-  // Mapper match entries → DB kolonner
-  const matchColumns = mapMatchesToDbArrays(validatedMatch.matches)
+  return {
+    type: draft.type,
+    status: draft.status,
+    relatedBankAccounts: draft.relatedBankAccounts,
 
-  // Sammensæt payload til DB insert
-  const payload = {
-    ...input.basicStep,
     ...matchColumns,
-    ...input.accountingStep
+
+    accountingPrimaryAccount: draft.accountingPrimaryAccount,
+    accountingSecondaryAccount: draft.accountingSecondaryAccount,
+    accountingTertiaryAccount: draft.accountingTertiaryAccount,
+    accountingText: draft.accountingText,
+    accountingCprType: draft.accountingCprType,
+    accountingCprNumber: draft.accountingCprNumber,
+    accountingNotifyTo: draft.accountingNotifyTo,
+    accountingNote: draft.accountingNote,
   }
-
-  const dbValidated = ruleInsertSchema.parse(payload)
-
-  await db.insert(Rule).values(dbValidated)
-
-  return dbValidated
 }
 
 export default defineEventHandler(async (event) => {
-  const body = await readBody(event)
-
   try {
-    const createdRule = await createRule(body)
-    return {
-      success: true,
-      data: createdRule
-    }
+    const body = await readBody(event)
+
+    const draft = ruleDraftSchema.parse(body)
+    const dbPayload = compileRuleDraftToDb(draft)
+    const validated = createInsertSchema(Rule).parse(dbPayload)
+
+    await db.insert(Rule).values(validated)
+
+    return { success: true }
   } catch (error: any) {
     return {
       success: false,
-      error: error?.message || 'Uventet fejl'
+      error: error?.issues ?? error?.message ?? 'Uventet fejl'
     }
   }
 })

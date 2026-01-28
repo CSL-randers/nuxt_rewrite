@@ -1,30 +1,31 @@
 import { z } from "zod"
 import { pgTable, text, date, numeric, integer, uuid } from "drizzle-orm/pg-core"
-import { createInsertSchema, createUpdateSchema, createSelectSchema } from "drizzle-zod"
+import { createUpdateSchema, createSelectSchema } from "drizzle-zod"
 import { ruleTypeEnum, ruleStatusEnum, cprTypeEnum, Account, RuleTag } from "./index"
-import { ruleListDto } from "../dto/ruleList"
+
+type RuleColumnKey =
+  | 'matchText'
+  | 'matchPrimaryReference'
+  | 'matchId'
+  | 'matchBatch'
+  | 'matchEndToEndId'
+  | 'matchOcrReference'
+  | 'matchDebtorsPaymentId'
+  | 'matchDebtorText'
+  | 'matchDebtorMessage'
+  | 'matchCreditorText'
+  | 'matchCreditorMessage'
+  | 'matchDebtorId'
+  | 'matchDebtorName'
+  | 'matchCreditorId'
+  | 'matchCreditorName'
+  | 'matchType'
+  | 'matchTxDomain'
+  | 'matchTxFamily'
+  | 'matchTxSubFamily'
 
 // ---------------------------
-// 1. Typedefs and matchEntry
-// ---------------------------
-export const matchCategories = Object.keys(ruleListDto.shape.matching.shape) as string[]
-
-export const matchEntrySchema = z.object({
-  category: z.enum(matchCategories),
-  value: z.string().min(1, "Value kan ikke være tom"),
-  fields: z.array(z.string()).min(1, "Vælg mindst én kolonne"), // DB kolonner som fx matchText
-  gate: z.enum(['AND', 'OR']).default('AND')
-})
-export type MatchEntry = z.infer<typeof matchEntrySchema>
-
-// Frontend matchStep schema
-export const matchStepInsertSchema = z.object({
-  matches: z.array(matchEntrySchema).min(1, "Vælg mindst én match entry"),
-})
-export type MatchStepInsertSchema = z.infer<typeof matchStepInsertSchema>
-
-// ---------------------------
-// 2. Main table
+// 1. Main table
 // ---------------------------
 export const Rule = pgTable('rule', {
   id: integer().primaryKey().generatedAlwaysAsIdentity(),
@@ -91,13 +92,67 @@ export const Rule = pgTable('rule', {
 })
 
 // ---------------------------
+// 2. Typedefs and matchEntry
+// ---------------------------
+
+export const matchCategoryColumns = {
+  references: [
+    'matchText',
+    'matchPrimaryReference',
+    'matchId',
+    'matchBatch',
+    'matchEndToEndId',
+    'matchOcrReference',
+    'matchDebtorsPaymentId',
+    'matchDebtorText',
+    'matchDebtorMessage',
+    'matchCreditorText',
+    'matchCreditorMessage'
+  ],
+  counterparties: [
+    'matchDebtorId',
+    'matchDebtorName',
+    'matchCreditorId',
+    'matchCreditorName'
+  ],
+  classification: [
+    'matchType',
+    'matchTxDomain',
+    'matchTxFamily',
+    'matchTxSubFamily'
+  ]
+} satisfies Record<string, RuleColumnKey[]>
+
+export type MatchCategory = keyof typeof matchCategoryColumns
+
+export const matchCategories = Object.keys(matchCategoryColumns) as MatchCategory[]
+
+export type MatchField = keyof typeof Rule
+
+export const matchEntrySchema = z.object({
+  category: z.enum(matchCategories),
+  value: z.string().min(1, "Value kan ikke være tom"),
+  fields: z.array(z.custom<MatchField>()).optional(),
+  gate: z.enum(['OG', 'ELLER']).default('OG')
+})
+
+export type MatchGate = 'OG' | 'ELLER'
+export type MatchEntry = z.infer<typeof matchEntrySchema>
+
+
+// ---------------------------
 // 3. Helpers
 // ---------------------------
 export function mapMatchesToDbArrays(matches: MatchEntry[]) {
-  const dbObj: Partial<Record<string, string[]>> = {}
+  const dbObj: Partial<Record<keyof typeof Rule, string[]>> = {}
 
   matches.forEach(entry => {
-    entry.fields.forEach(field => {
+    const fields =
+      entry.fields?.length
+        ? entry.fields
+        : matchCategoryColumns[entry.category]
+
+    fields.forEach(field => {
       if (!dbObj[field]) dbObj[field] = []
       dbObj[field]!.push(entry.value)
     })
@@ -109,30 +164,23 @@ export function mapMatchesToDbArrays(matches: MatchEntry[]) {
 // ---------------------------
 // 4. Insert / Update / Select schemas
 // ---------------------------
-export const ruleInsertSchema = createInsertSchema(Rule).omit({
-  id: true,
-  createdAt: true,
-  updatedAt: true,
-})
-
-export const basicStepInsertSchema  = createInsertSchema(Rule).pick({
-  type: true,
-  status: true,
-  relatedBankAccounts: true
-})
-
-export const accountingStepInsertSchema  = createInsertSchema(Rule).omit({
-  accountingPrimaryAccount: true,
-  accountingSecondaryAccount: true,
-  accountingTertiaryAccount: true,
-  accountingText: true,
-  accountingCprType: true,
-  accountingCprNumber: true,
-  accountingNotifyTo: true,
-  accountingNote: true,
-  accountingAttachmentName: true,
-  accountingAttachmentFileExtension: true,
-  accountingAttachmentData: true
+export const ruleDraftSchema = z.object({
+  type: ruleTypeEnum(),
+  status: ruleStatusEnum(),
+  relatedBankAccounts: z.array(z.string()),
+  matches: z.array(matchEntrySchema),
+  accountingPrimaryAccount: z.string(),
+  accountingSecondaryAccount: z.string().optional(),
+  accountingTertiaryAccount: z.string().optional(),
+  accountingText: z.string().optional(),
+  accountingCprType: cprTypeEnum(),
+  accountingCprNumber: z.string().optional(),
+  accountingNotifyTo: z.string().optional(),
+  accountingNote: z.string().optional(),
+  accountingAttachmentName: text().array(),
+  accountingAttachmentFileExtension: text().array(),
+  accountingAttachmentData: text().array(),
+  ruleTags: text().array(),
 })
 
 export const ruleUpdateSchema = createUpdateSchema(Rule).omit({
@@ -141,7 +189,6 @@ export const ruleUpdateSchema = createUpdateSchema(Rule).omit({
   updatedAt: true,
 })
 
-export const ruleSelectSchema = createSelectSchema(Rule)
 export const ruleMatchingSelectSchema = createSelectSchema(Rule).pick({
   accountingPrimaryAccount: true,
   accountingSecondaryAccount: true,
@@ -154,7 +201,6 @@ export const ruleMatchingSelectSchema = createSelectSchema(Rule).pick({
 // ---------------------------
 // 5. Type exports
 // ---------------------------
-export type RuleInsertSchema = z.infer<typeof ruleInsertSchema>
+export type RuleDraftSchema = z.infer<typeof ruleDraftSchema>
 export type RuleUpdateSchema = z.infer<typeof ruleUpdateSchema>
-export type RuleSelectSchema = z.infer<typeof ruleSelectSchema>
 export type RuleMatchingSelectSchema = z.infer<typeof ruleMatchingSelectSchema>
