@@ -1,15 +1,12 @@
 <script setup lang="ts">
 import type { TableColumn } from '@nuxt/ui'
 import { upperFirst } from 'scule'
-import { flattenBy, getPaginationRowModel } from '@tanstack/table-core'
 import type { Row } from '@tanstack/table-core'
-import type { RuleSelectSchema, Account } from '~/lib/db/schema/index'
-
+import { getPaginationRowModel } from '@tanstack/table-core'
+import type { RuleTableRow } from '~/lib/db/schema/index'
+import { ruleTypeEnum, ruleStatusEnum } from '~/lib/db/schema/index'
+import type { RuleListDto } from '~/lib/db/dto/ruleList'
 import useFlattenArray from '~/composables/useFlattenArray'
-
-type RuleRow = RuleListDto & {
-  bankAccountIds: string[]
-}
 
 const UButton = resolveComponent('UButton')
 const UBadge = resolveComponent('UBadge')
@@ -24,38 +21,31 @@ const table = useTemplateRef('table')
 
 const globalFilterValue = ref('')
 
+// API calls
 const { data: rules, status } = await useFetch<RuleListDto[]>('/api/rules', {
-  key: 'rules'
+  key: 'rules',
+  method: 'GET'
 })
 
-const { data: bankAccounts } = await useFetch<Account[]>('/api/bank-accounts', {
-  key: 'bankaccounts'
-})
+// Type labels
+const typeLabelMap = Object.fromEntries(Object.values(ruleTypeEnum).map(v => [v, upperFirst(v)]))
 
-// Normalise data from the API to an array of rules and add names to related bank accounts
-const rows = computed<RuleRow[]>(() => {
+// Normaliser data til RuleTableRow
+const rows = computed<RuleTableRow[]>(() => {
   const flatRules = useFlattenArray<RuleListDto>(rules.value || [])
 
   return flatRules.map(rule => ({
     ...rule,
-    bankAccountIds: rule.relatedBankAccounts
+    bankAccountIds: rule.relatedBankAccounts || []
   }))
 })
 
-// Items i dropdown-menu for hver række
-function getRowItems(row: Row<RuleRow>) {
+// Dropdown-menu for actions
+function getRowItems(row: Row<RuleTableRow>) {
   return [
-    {
-      type: 'label',
-      label: 'Handlinger'
-    },
-    {
-      label: 'Rediger regel',
-      icon: 'solar:ruler-cross-pen-bold-duotone'
-    },
-    {
-      type: 'separator'
-    },
+    { type: 'label', label: 'Handlinger' },
+    { label: 'Rediger regel', icon: 'solar:ruler-cross-pen-bold-duotone' },
+    { type: 'separator' },
     {
       label: 'Slet regel',
       icon: 'solar:trash-bin-trash-bold-duotone',
@@ -80,7 +70,7 @@ const columnVisibility = ref({
   ruleTags_flat: false
 })
 
-const columns: TableColumn<RuleRow>[] = [
+const columns: TableColumn<RuleTableRow>[] = [
   { // Selekteringskolonne
     id: 'Vælg',
     enableHiding: false,
@@ -130,13 +120,13 @@ const columns: TableColumn<RuleRow>[] = [
   { // Konto (hidden, kun til filtrering)
     accessorKey: 'relatedBankAccounts',
     enableHiding: false,
-    cell: ({ row }) => row.original.bankAccountIds.join(', ')
+    cell: ({ row }) => row.original.relatedBankAccounts.join(', ')
   },
   { // Stamdata
     id: 'Stamdata',
     cell: ({ row }) => {
       const statusColor = { aktiv: 'text-green-600', inaktiv: 'text-red-600' }[row.original.status]
-      const typeLabel = { standard: 'Standard', undtagelse: 'Undtagelse', engangs: 'Engangs' }[row.original.type]
+      const typeLabel = typeLabelMap[row.original.type]
 
       return h('div', { class: classMultiplePropsColumn }, [
         h('p', { class: 'font-medium' }, [
@@ -145,7 +135,7 @@ const columns: TableColumn<RuleRow>[] = [
         ]),
         h('p', { class: 'font-medium' }, [
           h('span', { class: 'text-highlighted' }, 'Konti: '),
-          h('span', {}, row.original.bankAccountIds.join(', '))
+          h('span', {}, row.original.relatedBankAccounts.join(', '))
         ]),
         h('p', { class: 'font-medium' }, [
           h('span', { class: 'text-highlighted' }, 'Type: '),
@@ -187,7 +177,7 @@ const columns: TableColumn<RuleRow>[] = [
   { // Datoer
     id: 'Datoer',
     cell: ({ row }) => {
-      const formatDate = (date: Date | undefined) => {
+      const formatDate = (date: Date | undefined | null) => {
         if (!date) return 'N/A'
         return new Date(date).toLocaleDateString('da-DK', {
           year: 'numeric',
@@ -218,7 +208,7 @@ const columns: TableColumn<RuleRow>[] = [
     enableHiding: false,
     cell: () => undefined
   },
-  {
+  { // Hidden matching columns to make them searchable
     id: 'counterparties_flat',
     accessorFn: row => row.matching.counterparties.join(' '),
     enableHiding: false,
@@ -269,15 +259,12 @@ const typeFilter = ref('alle')
 
 const statusItems = [
   { label: 'Alle', value: 'alle' },
-  { label: 'Aktive', value: 'aktiv' },
-  { label: 'Inaktive', value: 'inaktiv' }
+  ...Object.values(ruleStatusEnum).map(t => ({ label: upperFirst(t), value: t }))
 ]
 
 const typeItems = [
   { label: 'Alle', value: 'alle' },
-  { label: 'Standard', value: 'standard' },
-  { label: 'Undtagelse', value: 'undtagelse' },
-  { label: 'Engangs', value: 'engangs' }
+  ...Object.values(ruleTypeEnum).map(t => ({ label: upperFirst(t), value: t }))
 ]
 
 const statusDropdownItems = computed(() =>
@@ -314,10 +301,7 @@ watch(() => typeFilter.value, (newVal) => {
   typeColumn.setFilterValue(newVal === 'alle' ? undefined : newVal)
 })
 
-const pagination = ref({
-  pageIndex: 0,
-  pageSize: 20
-})
+const pagination = ref({ pageIndex: 0, pageSize: 20 })
 </script>
 
 <template>

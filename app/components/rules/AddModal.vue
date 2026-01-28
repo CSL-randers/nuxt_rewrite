@@ -172,6 +172,8 @@ const onSubmit = async (event: FormSubmitEvent<RuleDraftSchema>) => {
     ...dbMatches
   }
 
+  await useFetch<RuleDraftSchema[]>('/api/rule', { body: payload, method: 'POST' })
+
   console.log('Form submitted:', payload)
 
   toast.add({ title: 'Regel oprettet', description: 'Den nye regel er blevet oprettet.' })

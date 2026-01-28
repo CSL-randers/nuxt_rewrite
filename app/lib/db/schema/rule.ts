@@ -1,6 +1,7 @@
 import { z } from "zod"
 import { pgTable, text, date, numeric, integer, uuid } from "drizzle-orm/pg-core"
 import { createUpdateSchema, createSelectSchema } from "drizzle-zod"
+import type { RuleType, RuleStatus } from "./index"
 import { ruleTypeEnum, ruleStatusEnum, cprTypeEnum, Account, RuleTag } from "./index"
 
 type RuleColumnKey =
@@ -183,6 +184,8 @@ export const ruleDraftSchema = z.object({
   ruleTags: text().array(),
 })
 
+export const ruleSelectSchema = createSelectSchema(Rule)
+
 export const ruleUpdateSchema = createUpdateSchema(Rule).omit({
   id: true,
   createdAt: true,
@@ -203,4 +206,21 @@ export const ruleMatchingSelectSchema = createSelectSchema(Rule).pick({
 // ---------------------------
 export type RuleDraftSchema = z.infer<typeof ruleDraftSchema>
 export type RuleUpdateSchema = z.infer<typeof ruleUpdateSchema>
+export type RuleSelectSchema = z.infer<typeof ruleUpdateSchema>
 export type RuleMatchingSelectSchema = z.infer<typeof ruleMatchingSelectSchema>
+
+export type RuleTableRow = {
+  id: number
+  type: RuleType
+  status: RuleStatus
+  relatedBankAccounts: string[]
+  ruleTags?: string[]
+  matching: {
+    references: string[]
+    counterparties: string[]
+    classification: string[]
+  }
+  createdAt: Date
+  updatedAt: Date
+  lastUsed?: Date | null
+}

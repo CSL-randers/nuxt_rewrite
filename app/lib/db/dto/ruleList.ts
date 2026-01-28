@@ -1,9 +1,12 @@
 import { z } from 'zod'
+import type { RuleTableRow } from "../schema"
+import { ruleTypeValues, ruleStatusValues } from "../schema"
+
 
 export const ruleListDto = z.object({
   id: z.number(),
-  type: z.string(),
-  status: z.string(),
+  type: z.enum(ruleTypeValues),
+  status: z.enum(ruleStatusValues),
 
   relatedBankAccounts: z.array(z.string()),
 
@@ -18,7 +21,7 @@ export const ruleListDto = z.object({
   }),
 
   ruleTags: z.array(z.string()).optional()
-})
+}) satisfies z.ZodType<RuleTableRow>
 
 export const ruleListDtoArray = z.array(ruleListDto)
 export type RuleListDto = z.infer<typeof ruleListDto>
