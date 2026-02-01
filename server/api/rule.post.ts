@@ -1,7 +1,7 @@
 import { defineEventHandler, readBody } from 'h3'
 import { createInsertSchema } from 'drizzle-zod'
-import { Rule, mapMatchesToDbArrays, ruleDraftSchema } from '~/lib/db/schema/index'
-import type { RuleDraftSchema } from '~/lib/db/schema/index'
+import { Rule, mapMatchesToDbArrays, ruleDraftSchema } from '~/lib/db/schema'
+import type { RuleDraftSchema } from '~/lib/db/schema'
 import db from '~/lib/db'
 
 export function compileRuleDraftToDb(draft: RuleDraftSchema) {

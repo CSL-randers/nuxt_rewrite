@@ -1,8 +1,11 @@
 import { z } from "zod"
 import { pgTable, text, date, numeric, integer, uuid } from "drizzle-orm/pg-core"
 import { createUpdateSchema, createSelectSchema } from "drizzle-zod"
-import type { RuleType, RuleStatus } from "./index"
-import { ruleTypeEnum, ruleStatusEnum, cprTypeEnum, Account, RuleTag } from "./index"
+import type { RuleType, RuleStatus } from "./enums"
+import { ruleTypeEnum, ruleStatusEnum, cprTypeEnum, ruleTypeValues, ruleStatusValues, cprTypeValues } from "./enums"
+import { Account } from "./account"
+import { RuleTag } from "./ruleTag"
+
 
 type RuleColumnKey =
   | 'matchText'
@@ -97,7 +100,7 @@ export const Rule = pgTable('rule', {
 // ---------------------------
 
 export const matchCategoryColumns = {
-  references: [
+  Fritekst: [
     'matchText',
     'matchPrimaryReference',
     'matchId',
@@ -110,13 +113,13 @@ export const matchCategoryColumns = {
     'matchCreditorText',
     'matchCreditorMessage'
   ],
-  counterparties: [
+  Part: [
     'matchDebtorId',
     'matchDebtorName',
     'matchCreditorId',
     'matchCreditorName'
   ],
-  classification: [
+  Transaktionstype: [
     'matchType',
     'matchTxDomain',
     'matchTxFamily',
@@ -166,22 +169,22 @@ export function mapMatchesToDbArrays(matches: MatchEntry[]) {
 // 4. Insert / Update / Select schemas
 // ---------------------------
 export const ruleDraftSchema = z.object({
-  type: ruleTypeEnum(),
-  status: ruleStatusEnum(),
-  relatedBankAccounts: z.array(z.string()),
-  matches: z.array(matchEntrySchema),
-  accountingPrimaryAccount: z.string(),
+  type: z.enum(ruleTypeValues),
+  status: z.enum(ruleStatusValues),
+  relatedBankAccounts: z.array(z.string()).min(1, "Vælg mindst én bankkonto"),
+  matches: z.array(matchEntrySchema).min(1, "Tilføj mindst ét match"),
+  accountingPrimaryAccount: z.string().min(1, "Primær konto er påkrævet"),
   accountingSecondaryAccount: z.string().optional(),
   accountingTertiaryAccount: z.string().optional(),
   accountingText: z.string().optional(),
-  accountingCprType: cprTypeEnum(),
+  accountingCprType: z.enum(cprTypeValues),
   accountingCprNumber: z.string().optional(),
-  accountingNotifyTo: z.string().optional(),
+  accountingNotifyTo: z.string().email("Ugyldigt email").optional().or(z.literal("")),
   accountingNote: z.string().optional(),
-  accountingAttachmentName: text().array(),
-  accountingAttachmentFileExtension: text().array(),
-  accountingAttachmentData: text().array(),
-  ruleTags: text().array(),
+  accountingAttachmentName: z.array(z.string()).optional(),
+  accountingAttachmentFileExtension: z.array(z.string()).optional(),
+  accountingAttachmentData: z.array(z.string()).optional(),
+  ruleTags: z.array(z.string()).optional(),
 })
 
 export const ruleSelectSchema = createSelectSchema(Rule)
@@ -201,9 +204,9 @@ export const ruleMatchingSelectSchema = createSelectSchema(Rule).pick({
   accountingCprNumber: true
 })
 
-// ---------------------------
+// ---------------
 // 5. Type exports
-// ---------------------------
+// ---------------
 export type RuleDraftSchema = z.infer<typeof ruleDraftSchema>
 export type RuleUpdateSchema = z.infer<typeof ruleUpdateSchema>
 export type RuleSelectSchema = z.infer<typeof ruleUpdateSchema>
@@ -223,4 +226,79 @@ export type RuleTableRow = {
   createdAt: Date
   updatedAt: Date
   lastUsed?: Date | null
+}
+
+export const ruleListDto = z.object({
+  id: z.number(),
+  type: z.enum(ruleTypeValues),
+  status: z.enum(ruleStatusValues),
+
+  relatedBankAccounts: z.array(z.string()),
+
+  lastUsed: z.date().nullable(),
+  createdAt: z.date(),
+  updatedAt: z.date(),
+
+  matching: z.object({
+    references: z.array(z.string()),
+    counterparties: z.array(z.string()),
+    classification: z.array(z.string())
+  }),
+
+  ruleTags: z.array(z.string()).optional()
+}) satisfies z.ZodType<RuleTableRow>
+
+export const ruleListDtoArray = z.array(ruleListDto)
+export type RuleListDto = z.infer<typeof ruleListDto>
+
+function mergeArrays(...arrays: (string[] | null | undefined)[]) {
+  return arrays.flatMap(a => a ?? []).filter(Boolean)
+}
+
+// ------
+// 6. DTO
+// ------
+
+export function mapRuleToListDto(r: any): RuleListDto {
+  return {
+    id: r.id,
+    type: r.type,
+    status: r.status,
+    relatedBankAccounts: r.relatedBankAccounts,
+    lastUsed: r.lastUsed,
+    createdAt: r.createdAt,
+    updatedAt: r.updatedAt,
+
+    matching: {
+      references: mergeArrays(
+        r.matchText,
+        r.matchPrimaryReference,
+        r.matchId,
+        r.matchBatch,
+        r.matchEndToEndId,
+        r.matchOcrReference,
+        r.matchDebtorsPaymentId,
+        r.matchDebtorText,
+        r.matchDebtorMessage,
+        r.matchCreditorText,
+        r.matchCreditorMessage
+      ),
+
+      counterparties: mergeArrays(
+        r.matchDebtorId,
+        r.matchDebtorName,
+        r.matchCreditorId,
+        r.matchCreditorName
+      ),
+
+      classification: mergeArrays(
+        r.matchType,
+        r.matchTxDomain,
+        r.matchTxFamily,
+        r.matchTxSubFamily
+      )
+    },
+
+    ruleTags: (r.ruleTags as { id: string }[] | undefined)?.map(t => t.id)
+  }
 }

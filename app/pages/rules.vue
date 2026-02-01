@@ -3,9 +3,8 @@ import type { TableColumn } from '@nuxt/ui'
 import { upperFirst } from 'scule'
 import type { Row } from '@tanstack/table-core'
 import { getPaginationRowModel } from '@tanstack/table-core'
-import type { RuleTableRow } from '~/lib/db/schema/index'
+import type { RuleTableRow, RuleListDto } from '~/lib/db/schema/index'
 import { ruleTypeEnum, ruleStatusEnum } from '~/lib/db/schema/index'
-import type { RuleListDto } from '~/lib/db/dto/ruleList'
 import useFlattenArray from '~/composables/useFlattenArray'
 
 const UButton = resolveComponent('UButton')

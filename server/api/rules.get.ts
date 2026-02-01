@@ -1,4 +1,4 @@
-import { ruleListDtoArray, mapRuleToListDto } from '~/lib/db/dto/ruleList'
+import { ruleListDtoArray, mapRuleToListDto } from '~/lib/db/schema'
 import db from '~/lib/db'
 
 export default defineEventHandler(async (event) => {

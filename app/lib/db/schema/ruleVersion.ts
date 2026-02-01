@@ -1,7 +1,7 @@
 import { z } from "zod"
 import { createInsertSchema, createSelectSchema } from "drizzle-zod"
 import { pgTable, integer, uuid, bigint, jsonb, date } from "drizzle-orm/pg-core"
-import { Rule } from "./index"
+import { Rule } from "./rule"
 
 // Table will be populated when rules are created or changed
 export const ruleVersion = pgTable('rule_version', {

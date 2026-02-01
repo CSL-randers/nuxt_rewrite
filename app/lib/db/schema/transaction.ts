@@ -1,7 +1,9 @@
 import { z } from "zod"
 import { pgTable, text, integer, numeric, date, uniqueIndex } from "drizzle-orm/pg-core"
 import { createInsertSchema, createUpdateSchema, createSelectSchema } from "drizzle-zod"
-import { bookingStatusEnum, Account, Rule } from "./index"
+import { bookingStatusEnum } from "./enums"
+import { Account } from "./account"
+import { Rule } from "./rule"
 
 // Table is structured and mostly named after providers API response.entries[i] or 'SimpleAccountReportEntry'
 export const Transaction = pgTable('transaction', {

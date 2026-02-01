@@ -1,6 +1,6 @@
 import { z } from "zod"
 import { createInsertSchema, createUpdateSchema, createSelectSchema } from "drizzle-zod"
-import { pgTable, text, date, uuid, json } from "drizzle-orm/pg-core"
+import { pgTable, date, uuid, json } from "drizzle-orm/pg-core"
 import { runStatusEnum } from "./enums"
 
 // Table will only be populated with data during batch runs and when user books an open items

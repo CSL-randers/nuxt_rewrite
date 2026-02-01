@@ -1,7 +1,8 @@
 import { z } from "zod"
 import { createInsertSchema, createSelectSchema } from "drizzle-zod"
 import { pgTable, text, uuid, json } from "drizzle-orm/pg-core"
-import { BankingRequest, Run } from "./index"
+import { Run } from "./run"
+import { BankingRequest } from "./bankingRequest"
 
 // Table will only be populated with data during batch runs or reruns
 export const BankingResponse = pgTable('banking_response', {

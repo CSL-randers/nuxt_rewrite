@@ -1,5 +1,5 @@
 import { z } from "zod"
-import { pgTable, text, integer, boolean } from "drizzle-orm/pg-core"
+import { pgTable, text, boolean } from "drizzle-orm/pg-core"
 import { createInsertSchema, createUpdateSchema, createSelectSchema } from "drizzle-zod"
 import { erpSupplierEnum } from "./enums"
 

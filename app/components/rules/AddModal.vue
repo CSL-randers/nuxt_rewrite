@@ -12,12 +12,13 @@ import type {
   MatchCategory
 } from '~/lib/db/schema/index'
 import {
-  ruleTypeEnum,
-  ruleStatusEnum,
-  cprTypeEnum,
+  ruleTypeValues,
+  ruleStatusValues,
+  cprTypeValues,
   matchCategories,
   matchCategoryColumns,
-  mapMatchesToDbArrays
+  mapMatchesToDbArrays,
+  ruleDraftSchema
 } from '~/lib/db/schema/index'
 
 const open = ref(false)
@@ -53,33 +54,48 @@ const matchInputs = reactive(
   initCategoryRecord<string>(() => '')
 )
 
-const selectedGates = reactive(
+const matchCategoryGates = reactive(
   initCategoryRecord<MatchGate>(() => 'OG')
 )
 
-const addMatchEntry = (category: MatchCategory) => {
+const matchModes = reactive(
+  initCategoryRecord<'Alle felter' | 'Vælg felter'>(() => 'Alle felter')
+)
+
+const addMatchEntry = (category: MatchCategory, mode: 'Alle felter' | 'Vælg felter') => {
   const value = matchInputs[category].trim()
   if (!value) return
 
-  const fields = selectedColumns[category]
-  const gate = selectedGates[category]
+  // Sæt gate baseret på mode
+  if (mode === 'Alle felter' || (mode === 'Vælg felter' && selectedColumns[category].length > 1)) {
+    matchCategoryGates[category] = 'ELLER'
+  } else if (mode === 'Vælg felter' && selectedColumns[category].length === 1) {
+    matchCategoryGates[category] = 'OG'
+  }
 
   const entry: MatchEntry = {
     category,
     value,
-    gate,
-    ...(fields.length > 0 ? { fields } : {})
+    gate: matchCategoryGates[category],
+    ...(mode === 'Vælg felter' && selectedColumns[category].length > 0 ? { fields: selectedColumns[category] } : {})
   }
 
   matches.value.push(entry)
 
   matchInputs[category] = ''
   selectedColumns[category] = []
-  selectedGates[category] = 'OG'
 }
 
 const removeMatchEntry = (index: number) => {
   matches.value.splice(index, 1)
+}
+
+const getMatchesForCategory = (category: MatchCategory) => {
+  return matches.value.filter(m => m.category === category)
+}
+
+const shouldShowGateToggle = (category: MatchCategory) => {
+  return getMatchesForCategory(category).length > 1
 }
 
 // ------------------
@@ -114,16 +130,16 @@ const state = reactive<Partial<RuleDraftUiState>>({
   accountingCprNumber: undefined,
   accountingNotifyTo: undefined,
   accountingNote: undefined,
-  accountingAttachmentName: null,
-  accountingAttachmentFileExtension: null,
-  accountingAttachmentData: null,
-  ruleTags: null
+  accountingAttachmentName: undefined,
+  accountingAttachmentFileExtension: undefined,
+  accountingAttachmentData: undefined,
+  ruleTags: undefined
 })
 
 // ------------------------------------------
 // Options to USelect og USelectMenu elements
 // ------------------------------------------
-type AccountOption = { label: string, value: string }
+type AccountOption = { label: string; value: string }
 const { data: rawAccounts } = await useFetch<AccountSelectSchema[]>('/api/bank-accounts', { key: 'bankaccounts' })
 const accountOptions = computed<AccountOption[]>(() =>
   (rawAccounts.value ?? []).map(acc => ({
@@ -132,20 +148,37 @@ const accountOptions = computed<AccountOption[]>(() =>
   }))
 )
 
-const typeOptions = Object.values(ruleTypeEnum).map(value => ({
-  label: value.charAt(0).toUpperCase() + value.slice(1), // gør første bogstav stort
-  value
-})) satisfies { label: string; value: RuleType }[]
+const typeOptions = computed(() =>
+  Object.values(ruleTypeValues).map(value => ({
+    label: typeof value === 'string' ? value.charAt(0).toUpperCase() + value.slice(1) : String(value),
+    value
+  })) as { label: string; value: RuleType }[]
+)
 
-const statusOptions = Object.values(ruleStatusEnum).map(value => ({
-  label: value.charAt(0).toUpperCase() + value.slice(1),
-  value
-})) satisfies { label: string; value: RuleStatus }[]
+const statusOptions = computed(() =>
+  Object.values(ruleStatusValues).map(value => ({
+    label: typeof value === 'string' ? value.charAt(0).toUpperCase() + value.slice(1) : String(value),
+    value
+  })) as { label: string; value: RuleStatus }[]
+)
 
-const cprTypeOptions = Object.values(cprTypeEnum).map(value => ({
-  label: value.charAt(0).toUpperCase() + value.slice(1),
-  value
-})) satisfies { label: string; value: CprType }[]
+const cprTypeOptions = computed(() =>
+  Object.values(cprTypeValues).map(value => ({
+    label: typeof value === 'string' ? value.charAt(0).toUpperCase() + value.slice(1) : String(value),
+    value
+  })) as { label: string; value: CprType }[]
+)
+
+const matchCategoryOptions = computed(() => {
+  const result: Record<MatchCategory, Array<{ label: string; value: MatchField }>> = {} as any
+  for (const [category, fields] of Object.entries(matchCategoryColumns)) {
+    result[category as MatchCategory] = (fields as MatchField[]).map(field => ({
+      label: field,
+      value: field
+    }))
+  }
+  return result
+})
 
 // ---------------
 // Step validation
@@ -157,54 +190,97 @@ const canProceed = computed(() => {
   return true
 })
 
-const handleNext = () => { if (currentStep.value < steps.length - 1) currentStep.value++ }
-const handlePrev = () => { if (currentStep.value > 0) currentStep.value-- }
+const handleNext = () => {
+  if (currentStep.value < steps.length - 1) currentStep.value++
+}
 
-const onSubmit = async (event: FormSubmitEvent<RuleDraftSchema>) => {
-  state.accountingAttachmentName = attachments.value?.names
-  state.accountingAttachmentFileExtension = attachments.value?.extensions
-  state.accountingAttachmentData = attachments.value?.base64
+const handlePrev = () => {
+  if (currentStep.value > 0) currentStep.value--
+}
+
+const onSubmit = async (event: FormSubmitEvent<typeof ruleDraftSchema>) => {
+  state.accountingAttachmentName = attachments.value?.names ?? undefined
+  state.accountingAttachmentFileExtension = attachments.value?.extensions ?? undefined
+  state.accountingAttachmentData = attachments.value?.base64 ?? undefined
 
   const dbMatches = mapMatchesToDbArrays(matches.value)
 
   const payload = {
     ...state,
+    matches: matches.value,
     ...dbMatches
   }
 
-  await useFetch<RuleDraftSchema[]>('/api/rule', { body: payload, method: 'POST' })
+  try {
+    await useFetch<RuleDraftSchema[]>('/api/rule', { body: payload, method: 'POST' })
 
-  console.log('Form submitted:', payload)
+    console.log('Form submitted:', payload)
 
-  toast.add({ title: 'Regel oprettet', description: 'Den nye regel er blevet oprettet.' })
-  open.value = false
-  currentStep.value = 0
+    toast.add({ title: 'Regel oprettet', description: 'Den nye regel er blevet oprettet.' })
+    open.value = false
+    currentStep.value = 0
+    matches.value = []
+  } catch (error) {
+    toast.add({ 
+      title: 'Fejl ved oprettelse', 
+      description: 'Der skete en fejl da reglen blev gemt.',
+      color: 'error'
+    })
+  }
 }
 </script>
 
 <template>
   <UModal v-model:open="open" title="Ny regel">
-    <UButton class="font-bold rounded-full" icon="i-lucide-plus" label="Ny regel" />
+    <template #header>
+      <div class="flex items-center justify-between">
+        <h2 class="text-lg font-semibold">Ny regel</h2>
+      </div>
+    </template>
+
+    <template #default>
+      <UButton class="font-bold rounded-full" icon="i-lucide-plus" label="Ny regel" @click="open = true" />
+    </template>
 
     <template #body>
-      <UForm @submit.prevent="onSubmit">
+      <UForm :schema="ruleDraftSchema" @FormSubmitEvent="onSubmit">
         <UStepper v-model="currentStep" :items="steps" class="mb-6">
           <template #content="{ item }">
-            <USeparator class="mb-6"/>
-            
+            <USeparator class="mb-6" />
+
             <!-- BASIC STEP -->
             <template v-if="item.id === 'basic'">
               <div class="flex justify-between gap-4">
                 <UFormField label="Regeltype" name="type" required>
-                  <USelect v-model="state.type as RuleType" :items="typeOptions" labelKey="label" valueKey="value" placeholder="Vælg regeltype" />
+                  <USelect
+                    v-model="state.type as RuleType"
+                    :items="typeOptions"
+                    labelKey="label"
+                    valueKey="value"
+                    placeholder="Vælg regeltype"
+                  />
                 </UFormField>
 
                 <UFormField label="Status" name="status" required>
-                  <USelect v-model="state.status as RuleStatus" :items="statusOptions" labelKey="label" valueKey="value" placeholder="Vælg status" />
+                  <USelect
+                    v-model="state.status as RuleStatus"
+                    :items="statusOptions"
+                    labelKey="label"
+                    valueKey="value"
+                    placeholder="Vælg status"
+                  />
                 </UFormField>
 
                 <UFormField label="Bankkonto" name="relatedBankAccounts" required>
-                  <USelectMenu :ui="{ content: 'min-w-fit' }" v-model="state.relatedBankAccounts" :items="accountOptions" multiple labelKey="label" valueKey="value" placeholder="Vælg bankkonto"/>
+                  <USelectMenu
+                    v-model="state.relatedBankAccounts"
+                    :items="accountOptions"
+                    multiple
+                    labelKey="label"
+                    valueKey="value"
+                    placeholder="Vælg bankkonto"
+                    :ui="{ content: 'min-w-fit' }"
+                  />
                 </UFormField>
               </div>
             </template>
@@ -212,38 +288,100 @@ const onSubmit = async (event: FormSubmitEvent<RuleDraftSchema>) => {
             <!-- MATCH STEP -->
             <template v-if="item.id === 'match'">
               <div class="space-y-6">
-                <div v-for="category in matchCategories" :key="category" class="mb-6">
-                  <h3 class="font-semibold mb-2">{{ category }}</h3>
+                <div
+                  v-for="category in matchCategories"
+                  :key="category"
+                  class="mb-8 p-4 border border-gray-200 dark:border-gray-700 rounded-lg"
+                >
+                  <h3 class="font-semibold mb-4 text-lg">{{ category }}</h3>
 
-                  <div class="flex gap-2 mb-2">
-                    <UInput v-model="matchInputs[category]" :placeholder="`Tilføj ${category}`" />
-                    <UButton icon="i-lucide-plus" color="primary" variant="subtle" @click="() => addMatchEntry(category)" />
+                                    <!-- Input og knap -->
+                  <template v-if="matchModes[category] === 'Alle felter'">
+                    <div class="flex gap-2 mb-4">
+                      <UInput
+                        v-model="matchInputs[category]"
+                        :placeholder="`Søg i ${category.toLowerCase()}`"
+                        class="flex-1"
+                      />
+                      <UButton
+                        icon="i-lucide-plus"
+                        color="primary"
+                        @click="() => addMatchEntry(category, 'Alle felter')"
+                      />
+                    </div>
+                  </template>
+
+                  <template v-else>
+                    <div class="flex gap-2 mb-4">
+                      <UInput
+                        v-model="matchInputs[category]"
+                        :placeholder="`Værdi for ${selectedColumns[category].length > 0 ? selectedColumns[category].join(', ') : 'valgte felter'}`"
+                        class="flex-1"
+                      />
+                      <UButton
+                        icon="i-lucide-plus"
+                        color="primary"
+                        @click="() => addMatchEntry(category, 'Vælg felter')"
+                        :disabled="selectedColumns[category].length === 0"
+                      />
+                    </div>
+                  </template>
+
+                  <!-- Mode valg og feltvalg grupperet sammen -->
+                  <div class="mb-4 p-4 bg-gray-50 dark:bg-gray-800 rounded-md border border-gray-200 dark:border-gray-700 space-y-3">
+                    <div>
+                      <p class="text-xs font-medium uppercase text-gray-600 dark:text-gray-400 mb-2">Søgemetode</p>
+                      <URadioGroup
+                        v-model="matchModes[category]"
+                        :items="['Alle felter', 'Vælg felter']"
+                      />
+                    </div>
+
+                    <!-- Feltvalg - kun synlig i "Vælg felter" mode -->
+                    <template v-if="matchModes[category] === 'Vælg felter'">
+                      <div class="pt-2 border-t border-gray-200 dark:border-gray-700">
+                        <p class="text-xs font-medium uppercase text-gray-600 dark:text-gray-400 mb-2">Felter</p>
+                        <USelectMenu
+                          v-model="selectedColumns[category]"
+                          :items="matchCategoryOptions[category]"
+                          multiple
+                          labelKey="label"
+                          valueKey="value"
+                          placeholder="Vælg felter"
+                          class="flex-1"
+                          :ui="{ content: 'min-w-fit' }"
+                        />
+                      </div>
+                    </template>
                   </div>
 
-                  <!-- Kolonnevalg -->
-                  <div class="flex flex-wrap gap-2 mb-2">
-                    <label v-for="col in matchCategoryColumns[category]" :key="col" class="inline-flex items-center gap-1 cursor-pointer">
-                      <input type="checkbox" v-model="selectedColumns[category]" :value="col" />
-                      {{ col }}
-                    </label>
-                  </div>
-
-                  <!-- Gate -->
-                  <div class="flex gap-4 mb-2">
-                    <label class="inline-flex items-center gap-1">
-                      <input type="radio" v-model="selectedGates[category]" value="OG" /> OG
-                    </label>
-                    <label class="inline-flex items-center gap-1">
-                      <input type="radio" v-model="selectedGates[category]" value="ELLER" /> ELLER
-                    </label>
-                  </div>
-
-                  <!-- Liste af entries -->
-                  <div class="flex flex-wrap gap-2 mt-2">
-                    <UBadge v-for="(entry, idx) in matches.filter(m => m.category === category)" :key="idx" variant="subtle" color="primary" class="cursor-pointer" @click="removeMatchEntry(idx)">
-                      {{ entry.value }} ({{ entry.gate }})
-                      <UIcon name="i-lucide-x" class="ml-1" />
-                    </UBadge>
+                  <!-- Badge liste med gate info -->
+                  <div v-if="getMatchesForCategory(category).length > 0" class="mt-4">
+                    <div class="flex items-center gap-2 mb-3">
+                      <p class="text-sm font-medium text-gray-700 dark:text-gray-300">Matches</p>
+                      <span v-if="shouldShowGateToggle(category)" class="text-xs font-medium px-2 py-1 bg-amber-100 dark:bg-amber-900/30 text-amber-800 dark:text-amber-300 rounded">(OG)</span>
+                    </div>
+                    <div v-if="shouldShowGateToggle(category)" class="mb-3 p-2 bg-amber-50 dark:bg-amber-900/10 rounded border border-amber-200 dark:border-amber-800">
+                      <p class="text-xs text-amber-700 dark:text-amber-300">Alle matches skal være opfyldt samtidigt</p>
+                    </div>
+                    <div class="flex flex-wrap gap-2">
+                      <UBadge
+                        v-for="(entry, idx) in getMatchesForCategory(category)"
+                        :key="idx"
+                        variant="subtle"
+                        color="primary"
+                        class="cursor-pointer hover:opacity-75 transition pr-1"
+                        @click="removeMatchEntry(matches.indexOf(entry))"
+                      >
+                        <div class="text-xs">
+                          <div class="font-semibold">{{ entry.value }}</div>
+                          <div v-if="entry.fields" class="text-gray-600 dark:text-gray-400">
+                            {{ entry.fields.join(', ') }}
+                          </div>
+                        </div>
+                        <UIcon name="i-lucide-x" class="ml-2 w-3 h-3" />
+                      </UBadge>
+                    </div>
                   </div>
                 </div>
               </div>
@@ -251,90 +389,81 @@ const onSubmit = async (event: FormSubmitEvent<RuleDraftSchema>) => {
 
             <!-- ACCOUNTING STEP -->
             <template v-if="item.id === 'accounting'">
-							<div class="space-y-4">
-								<div class="flex justify-center flex-wrap gap-4 mb-6">
-									<UFormField label="Primær konto" name="accountingPrimaryAccount" required>
-										<UInput
-											v-model="state.accountingPrimaryAccount"
-											placeholder="Artskonto i Opus"
-										/>
-									</UFormField>
-									<UFormField label="Sekundær konto" name="accountingSecondaryAccount">
-										<UInput
-											v-model="state.accountingSecondaryAccount"
-											placeholder="PSP-element i Opus"
-										/>
-									</UFormField>
-									<UFormField label="Tertiær konto" name="accountingTertiaryAccount">
-										<UInput
-											v-model="state.accountingTertiaryAccount"
-											placeholder="Omkostningssted i Opus"
-										/>
-									</UFormField>
-								</div>
+              <div class="space-y-4">
+                <div class="flex justify-center flex-wrap gap-4 mb-6">
+                  <UFormField label="Primær konto" name="accountingPrimaryAccount" required>
+                    <UInput v-model="state.accountingPrimaryAccount" placeholder="Artskonto i Opus" />
+                  </UFormField>
+                  <UFormField label="Sekundær konto" name="accountingSecondaryAccount">
+                    <UInput v-model="state.accountingSecondaryAccount" placeholder="PSP-element i Opus" />
+                  </UFormField>
+                  <UFormField label="Tertiær konto" name="accountingTertiaryAccount">
+                    <UInput v-model="state.accountingTertiaryAccount" placeholder="Omkostningssted i Opus" />
+                  </UFormField>
+                </div>
 
-								<div class="flex justify-center gap-4 mb-6">
-									<UFormField label="Posteringstekst" name="accountingText">
-										<UInput
-											v-model="state.accountingText"
-											placeholder="Valgfri"
-										/>
-									</UFormField>
-								</div>
+                <div class="flex justify-center gap-4 mb-6">
+                  <UFormField label="Posteringstekst" name="accountingText">
+                    <UInput v-model="state.accountingText" placeholder="Valgfri" />
+                  </UFormField>
+                </div>
 
-								<div class="flex justify-center gap-4 mb-6">
-									<UFormField label="CPR-type" name="accountingCprType">
-										<USelectMenu
-											:ui="{ content: 'min-w-fit' }"
-											v-model="state.accountingCprType as CprType"
-											:items="cprTypeOptions"
-											labelKey="label"
-											valueKey="value"
-											placeholder="Vælg CPR-type"
-										/>
-									</UFormField>
-									<UFormField label="CPR-nummer" name="accountingCprNumber">
-										<UInput
-											v-model="state.accountingCprNumber"
-											:disabled="state.accountingCprType !== 'statisk'"
-										/>
-									</UFormField>
-								</div>
+                <div class="flex justify-center gap-4 mb-6">
+                  <UFormField label="CPR-type" name="accountingCprType">
+                    <USelectMenu
+                      v-model="state.accountingCprType as CprType"
+                      :items="cprTypeOptions"
+                      labelKey="label"
+                      valueKey="value"
+                      placeholder="Vælg CPR-type"
+                      :ui="{ content: 'min-w-fit' }"
+                    />
+                  </UFormField>
+                  <UFormField label="CPR-nummer" name="accountingCprNumber">
+                    <UInput
+                      v-model="state.accountingCprNumber"
+                      :disabled="state.accountingCprType !== 'statisk'"
+                    />
+                  </UFormField>
+                </div>
 
-								<div class="flex justify-center gap-4" mb-6>
-									<UFormField label="Notifikation til" name="accountingNotifyTo">
-										<UInput
-											v-model="state.accountingNotifyTo"
-											type="email"
-											placeholder="f.eks. csl@randers.dk"
-										/>
-									</UFormField>
-								</div>
+                <div class="flex justify-center gap-4 mb-6">
+                  <UFormField label="Notifikation til" name="accountingNotifyTo">
+                    <UInput
+                      v-model="state.accountingNotifyTo"
+                      type="email"
+                      placeholder="f.eks. csl@randers.dk"
+                    />
+                  </UFormField>
+                </div>
 
-								<div class="flex justify-center gap-4">
-									<UFormField label="Noter" name="accountingNote">
-										<UTextarea
-											v-model="state.accountingNote"
-											placeholder="Valgfri notering"
-										/>
-									</UFormField>
-								</div>
+                <div class="flex justify-center gap-4 mb-6">
+                  <UFormField label="Noter" name="accountingNote">
+                    <UTextarea v-model="state.accountingNote" placeholder="Valgfri notering" />
+                  </UFormField>
+                </div>
 
-								<div class="flex justify-center gap-4">
-									<RulesFileUpload @update="handleAttachmentUpdate" />
-								</div>
-							</div>
-						</template>
+                <div class="flex justify-center gap-4">
+                  <RulesFileUpload @update="handleAttachmentUpdate" />
+                </div>
+              </div>
+            </template>
           </template>
         </UStepper>
 
         <div class="flex justify-between gap-2 pt-4 border-t border-default">
-          <UButton label="Forrige" variant="soft" color="neutral" @click="handlePrev" :disabled="currentStep === 0"/>
+          <UButton
+            label="Forrige"
+            variant="soft"
+            color="neutral"
+            @click="handlePrev"
+            :disabled="currentStep === 0"
+          />
           <template v-if="currentStep === steps.length - 1">
             <UButton type="submit">Opret regel</UButton>
           </template>
           <template v-else>
-            <UButton label="Næste" color="primary" variant="solid" @click="handleNext" :disabled="!canProceed"/>
+            <UButton label="Næste" color="primary" @click="handleNext" :disabled="!canProceed" />
           </template>
         </div>
       </UForm>
