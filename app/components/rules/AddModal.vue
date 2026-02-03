@@ -32,6 +32,18 @@ const steps = [
 ]
 
 // ---------------------
+// Fetch rule tags
+// ---------------------
+type RuleTag = { id: string; name: string }
+const { data: ruleTagsData } = await useFetch<RuleTag[]>('/api/rule-tags', { key: 'ruletags' })
+const ruleTagOptions = computed(() =>
+  (ruleTagsData.value ?? []).map(tag => ({
+    label: tag.name,
+    value: tag.id
+  }))
+)
+
+// ---------------------
 // Match object handlers
 // ---------------------
 const matches = ref<MatchEntry[]>([])
@@ -122,6 +134,8 @@ const state = reactive<Partial<RuleDraftUiState>>({
   type: 'standard' as RuleType,
   status: 'aktiv' as RuleStatus,
   relatedBankAccounts: [],
+  matchAmountMin: undefined,
+  matchAmountMax: undefined,
   accountingPrimaryAccount: undefined,
   accountingSecondaryAccount: undefined,
   accountingTertiaryAccount: undefined,
@@ -183,13 +197,6 @@ const matchCategoryOptions = computed(() => {
 // ---------------
 // Step validation
 // ---------------
-const canProceed = computed(() => {
-  if (currentStep.value === 0) {
-    return state.type && state.status && state.relatedBankAccounts && state.relatedBankAccounts?.length > 0
-  }
-  return true
-})
-
 const handleNext = () => {
   if (currentStep.value < steps.length - 1) currentStep.value++
 }
@@ -198,7 +205,7 @@ const handlePrev = () => {
   if (currentStep.value > 0) currentStep.value--
 }
 
-const onSubmit = async (event: FormSubmitEvent<typeof ruleDraftSchema>) => {
+async function onSubmit(event: FormSubmitEvent<typeof ruleDraftSchema>) {
   state.accountingAttachmentName = attachments.value?.names ?? undefined
   state.accountingAttachmentFileExtension = attachments.value?.extensions ?? undefined
   state.accountingAttachmentData = attachments.value?.base64 ?? undefined
@@ -210,6 +217,8 @@ const onSubmit = async (event: FormSubmitEvent<typeof ruleDraftSchema>) => {
     matches: matches.value,
     ...dbMatches
   }
+
+  console.log('Submitting form with payload:', payload)
 
   try {
     await useFetch<RuleDraftSchema[]>('/api/rule', { body: payload, method: 'POST' })
@@ -243,14 +252,14 @@ const onSubmit = async (event: FormSubmitEvent<typeof ruleDraftSchema>) => {
     </template>
 
     <template #body>
-      <UForm :schema="ruleDraftSchema" @FormSubmitEvent="onSubmit">
+      <UForm :schema="ruleDraftSchema" :state="state" @submit="onSubmit">
         <UStepper v-model="currentStep" :items="steps" class="mb-6">
           <template #content="{ item }">
             <USeparator class="mb-6" />
 
             <!-- BASIC STEP -->
             <template v-if="item.id === 'basic'">
-              <div class="flex justify-between gap-4">
+              <div class="grid grid-cols-1 gap-4 mt-6 mb-6 w-full max-w-full">
                 <UFormField label="Regeltype" name="type" required>
                   <USelect
                     v-model="state.type as RuleType"
@@ -258,9 +267,9 @@ const onSubmit = async (event: FormSubmitEvent<typeof ruleDraftSchema>) => {
                     labelKey="label"
                     valueKey="value"
                     placeholder="Vælg regeltype"
+                    class="w-full"
                   />
                 </UFormField>
-
                 <UFormField label="Status" name="status" required>
                   <USelect
                     v-model="state.status as RuleStatus"
@@ -268,9 +277,9 @@ const onSubmit = async (event: FormSubmitEvent<typeof ruleDraftSchema>) => {
                     labelKey="label"
                     valueKey="value"
                     placeholder="Vælg status"
+                    class="w-full"
                   />
                 </UFormField>
-
                 <UFormField label="Bankkonto" name="relatedBankAccounts" required>
                   <USelectMenu
                     v-model="state.relatedBankAccounts"
@@ -279,7 +288,18 @@ const onSubmit = async (event: FormSubmitEvent<typeof ruleDraftSchema>) => {
                     labelKey="label"
                     valueKey="value"
                     placeholder="Vælg bankkonto"
-                    :ui="{ content: 'min-w-fit' }"
+                    class="w-full"
+                  />
+                </UFormField>
+                <UFormField label="Tags" name="ruleTags">
+                  <USelectMenu
+                    v-model="state.ruleTags"
+                    :items="ruleTagOptions"
+                    multiple
+                    labelKey="label"
+                    valueKey="value"
+                    placeholder="Vælg tags"
+                    class="w-full"
                   />
                 </UFormField>
               </div>
@@ -287,15 +307,41 @@ const onSubmit = async (event: FormSubmitEvent<typeof ruleDraftSchema>) => {
 
             <!-- MATCH STEP -->
             <template v-if="item.id === 'match'">
+              <!-- Beløbsgrænser -->
+              <div class="flex gap-4 mt-6 mb-6">
+                <UFormField label="Minimumsbeløb" name="matchAmountMin">
+                  <UInputNumber
+                    v-model="state.matchAmountMin"
+                    placeholder="DKK"
+                    :min="0"
+                    currency="DKK"
+                    currencyDisplay="symbol"
+                    class="min-w-fit"
+                  />
+                </UFormField>
+                <UFormField label="Maksimumsbeløb" name="matchAmountMax">
+                  <UInputNumber
+                    v-model="state.matchAmountMax"
+                    placeholder="DKK"
+                    :min="0"
+                    currency="DKK"
+                    currencyDisplay="symbol"
+                    class="min-w-fit"
+                  />
+                </UFormField>
+              </div>
               <div class="space-y-6">
                 <div
                   v-for="category in matchCategories"
                   :key="category"
-                  class="mb-8 p-4 border border-gray-200 dark:border-gray-700 rounded-lg"
                 >
-                  <h3 class="font-semibold mb-4 text-lg">{{ category }}</h3>
+                  <USeparator class="mb-4" color="primary">
+                    <div class="flex content-center h-8">
+                      <h3 class="font-semibold text-lg m-0">{{ category }}</h3>
+                    </div>
+                  </USeparator>
 
-                                    <!-- Input og knap -->
+                  <!-- Input og knap -->
                   <template v-if="matchModes[category] === 'Alle felter'">
                     <div class="flex gap-2 mb-4">
                       <UInput
@@ -389,26 +435,20 @@ const onSubmit = async (event: FormSubmitEvent<typeof ruleDraftSchema>) => {
 
             <!-- ACCOUNTING STEP -->
             <template v-if="item.id === 'accounting'">
-              <div class="space-y-4">
-                <div class="flex justify-center flex-wrap gap-4 mb-6">
-                  <UFormField label="Primær konto" name="accountingPrimaryAccount" required>
-                    <UInput v-model="state.accountingPrimaryAccount" placeholder="Artskonto i Opus" />
-                  </UFormField>
-                  <UFormField label="Sekundær konto" name="accountingSecondaryAccount">
-                    <UInput v-model="state.accountingSecondaryAccount" placeholder="PSP-element i Opus" />
-                  </UFormField>
-                  <UFormField label="Tertiær konto" name="accountingTertiaryAccount">
-                    <UInput v-model="state.accountingTertiaryAccount" placeholder="Omkostningssted i Opus" />
-                  </UFormField>
-                </div>
-
-                <div class="flex justify-center gap-4 mb-6">
-                  <UFormField label="Posteringstekst" name="accountingText">
-                    <UInput v-model="state.accountingText" placeholder="Valgfri" />
-                  </UFormField>
-                </div>
-
-                <div class="flex justify-center gap-4 mb-6">
+              <div class="grid grid-cols-1 gap-4 mt-6 mb-6 w-full max-w-full">
+                <UFormField label="Primær konto" name="accountingPrimaryAccount" required>
+                  <UInput v-model="state.accountingPrimaryAccount" class="w-full" placeholder="Artskonto i Opus" />
+                </UFormField>
+                <UFormField label="Sekundær konto" name="accountingSecondaryAccount">
+                  <UInput v-model="state.accountingSecondaryAccount" class="w-full" placeholder="PSP-element i Opus" />
+                </UFormField>
+                <UFormField label="Tertiær konto" name="accountingTertiaryAccount">
+                  <UInput v-model="state.accountingTertiaryAccount" class="w-full" placeholder="Omkostningssted i Opus" />
+                </UFormField>
+                <UFormField label="Posteringstekst" name="accountingText">
+                  <UInput v-model="state.accountingText" class="w-full" placeholder="Valgfri" />
+                </UFormField>
+                <div class="grid grid-cols-2 gap-4 mt-6 mb-6">
                   <UFormField label="CPR-type" name="accountingCprType">
                     <USelectMenu
                       v-model="state.accountingCprType as CprType"
@@ -416,34 +456,29 @@ const onSubmit = async (event: FormSubmitEvent<typeof ruleDraftSchema>) => {
                       labelKey="label"
                       valueKey="value"
                       placeholder="Vælg CPR-type"
-                      :ui="{ content: 'min-w-fit' }"
+                      class="w-full"
                     />
                   </UFormField>
                   <UFormField label="CPR-nummer" name="accountingCprNumber">
                     <UInput
                       v-model="state.accountingCprNumber"
+                      class="w-full"
                       :disabled="state.accountingCprType !== 'statisk'"
                     />
                   </UFormField>
                 </div>
-
-                <div class="flex justify-center gap-4 mb-6">
-                  <UFormField label="Notifikation til" name="accountingNotifyTo">
-                    <UInput
-                      v-model="state.accountingNotifyTo"
-                      type="email"
-                      placeholder="f.eks. csl@randers.dk"
-                    />
-                  </UFormField>
-                </div>
-
-                <div class="flex justify-center gap-4 mb-6">
-                  <UFormField label="Noter" name="accountingNote">
-                    <UTextarea v-model="state.accountingNote" placeholder="Valgfri notering" />
-                  </UFormField>
-                </div>
-
-                <div class="flex justify-center gap-4">
+                <UFormField label="Notifikation til" name="accountingNotifyTo" class="mb-6">
+                  <UInput
+                    v-model="state.accountingNotifyTo"
+                    type="email"
+                    class="w-full"
+                    placeholder="f.eks. csl@randers.dk"
+                  />
+                </UFormField>
+                <UFormField label="Noter" name="accountingNote">
+                  <UTextarea v-model="state.accountingNote" class="w-full" placeholder="Valgfri notering" />
+                </UFormField>
+                <div>
                   <RulesFileUpload @update="handleAttachmentUpdate" />
                 </div>
               </div>
@@ -463,7 +498,7 @@ const onSubmit = async (event: FormSubmitEvent<typeof ruleDraftSchema>) => {
             <UButton type="submit">Opret regel</UButton>
           </template>
           <template v-else>
-            <UButton label="Næste" color="primary" @click="handleNext" :disabled="!canProceed" />
+            <UButton label="Næste" color="primary" @click="handleNext" />
           </template>
         </div>
       </UForm>

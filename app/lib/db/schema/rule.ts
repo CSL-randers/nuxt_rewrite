@@ -124,7 +124,7 @@ export const matchCategoryColumns = {
     'matchTxDomain',
     'matchTxFamily',
     'matchTxSubFamily'
-  ]
+  ],
 } satisfies Record<string, RuleColumnKey[]>
 
 export type MatchCategory = keyof typeof matchCategoryColumns
@@ -165,26 +165,41 @@ export function mapMatchesToDbArrays(matches: MatchEntry[]) {
   return dbObj
 }
 
-// ---------------------------
+// -----------------------------------
 // 4. Insert / Update / Select schemas
-// ---------------------------
+// -----------------------------------
 export const ruleDraftSchema = z.object({
   type: z.enum(ruleTypeValues),
   status: z.enum(ruleStatusValues),
   relatedBankAccounts: z.array(z.string()).min(1, "Vælg mindst én bankkonto"),
-  matches: z.array(matchEntrySchema).min(1, "Tilføj mindst ét match"),
+  matches: z.array(matchEntrySchema).optional(),
+  matchAmountMin: z.number().optional(),
+  matchAmountMax: z.number().optional(),
   accountingPrimaryAccount: z.string().min(1, "Primær konto er påkrævet"),
   accountingSecondaryAccount: z.string().optional(),
   accountingTertiaryAccount: z.string().optional(),
   accountingText: z.string().optional(),
   accountingCprType: z.enum(cprTypeValues),
   accountingCprNumber: z.string().optional(),
-  accountingNotifyTo: z.string().email("Ugyldigt email").optional().or(z.literal("")),
+  accountingNotifyTo: z.string().email("Ugyldig email").optional().or(z.literal("")),
   accountingNote: z.string().optional(),
   accountingAttachmentName: z.array(z.string()).optional(),
   accountingAttachmentFileExtension: z.array(z.string()).optional(),
   accountingAttachmentData: z.array(z.string()).optional(),
   ruleTags: z.array(z.string()).optional(),
+})
+
+export const ruleBasicSchema = z.object({
+  type: z.enum(ruleTypeValues),
+  status: z.enum(ruleStatusValues),
+  relatedBankAccounts: z.array(z.string()).min(1, "Vælg mindst én bankkonto"),
+  ruleTags: z.array(z.string()).optional(),
+})
+
+export const ruleMatchingSchema = z.object({
+  matches: z.array(matchEntrySchema).optional(),
+  matchAmountMin: z.number().optional(),
+  matchAmountMax: z.number().optional(),
 })
 
 export const ruleSelectSchema = createSelectSchema(Rule)
