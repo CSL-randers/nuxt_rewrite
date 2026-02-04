@@ -1,5 +1,6 @@
 <script setup lang="ts">
 import type { FormSubmitEvent } from '@nuxt/ui'
+import { z } from 'zod'
 import type {
   AccountSelectSchema,
   RuleDraftSchema,
@@ -18,12 +19,17 @@ import {
   matchCategories,
   matchCategoryColumns,
   mapMatchesToDbArrays,
-  ruleDraftSchema
+  ruleDraftSchema,
+  ruleBasicSchema,
+  ruleMatchingSchema,
+  ruleAccountingSchema
 } from '~/lib/db/schema/index'
 
 const open = ref(false)
 const currentStep = ref(0)
 const toast = useToast()
+const formRef = ref<any>()
+const isStepValid = ref(true)
 
 const steps = [
   { id: 'basic', title: 'Basis', description: 'Vælg type, status og bankkonto' },
@@ -150,6 +156,25 @@ const state = reactive<Partial<RuleDraftUiState>>({
   ruleTags: undefined
 })
 
+const stepSchema = computed(() => {
+  switch (currentStep.value) {
+    case 0:
+      return ruleBasicSchema
+    case 1:
+      return ruleMatchingSchema
+    case 2:
+      return ruleAccountingSchema
+    default:
+      return ruleBasicSchema
+  }
+})
+
+export const ruleSubmitSchema = z
+  .object({})
+  .and(ruleBasicSchema)
+  .and(ruleMatchingSchema)
+  .and(ruleAccountingSchema)
+
 // ------------------------------------------
 // Options to USelect og USelectMenu elements
 // ------------------------------------------
@@ -197,38 +222,70 @@ const matchCategoryOptions = computed(() => {
 // ---------------
 // Step validation
 // ---------------
-const handleNext = () => {
-  if (currentStep.value < steps.length - 1) currentStep.value++
+const handleNext = async () => {
+  const valid = await formRef.value.validate({ schema: stepSchema.value })
+  isStepValid.value = valid
+  if (!valid) return
+
+  currentStep.value++
 }
 
 const handlePrev = () => {
   if (currentStep.value > 0) currentStep.value--
 }
 
-async function onSubmit(event: FormSubmitEvent<typeof ruleDraftSchema>) {
+async function onSubmit(event: FormSubmitEvent<typeof ruleSubmitSchema>) { 
   state.accountingAttachmentName = attachments.value?.names ?? undefined
   state.accountingAttachmentFileExtension = attachments.value?.extensions ?? undefined
   state.accountingAttachmentData = attachments.value?.base64 ?? undefined
 
-  const dbMatches = mapMatchesToDbArrays(matches.value)
-
   const payload = {
     ...state,
     matches: matches.value,
-    ...dbMatches
+    ...mapMatchesToDbArrays(matches.value)
+  }
+
+  const result = ruleSubmitSchema.safeParse(payload)
+  if (!result.success) {
+    console.error(result.error)
+    return
   }
 
   console.log('Submitting form with payload:', payload)
 
   try {
-    await useFetch<RuleDraftSchema[]>('/api/rule', { body: payload, method: 'POST' })
+    await $fetch<RuleDraftSchema>('/api/rule', {
+      method: 'POST',
+      body: payload
+    })
 
     console.log('Form submitted:', payload)
 
     toast.add({ title: 'Regel oprettet', description: 'Den nye regel er blevet oprettet.' })
     open.value = false
+
+    // Reset state
     currentStep.value = 0
     matches.value = []
+    Object.assign(state, {
+      type: 'standard' as RuleType,
+      status: 'aktiv' as RuleStatus,
+      relatedBankAccounts: [],
+      matchAmountMin: undefined,
+      matchAmountMax: undefined,
+      accountingPrimaryAccount: undefined,
+      accountingSecondaryAccount: undefined,
+      accountingTertiaryAccount: undefined,
+      accountingText: undefined,
+      accountingCprType: 'ingen' as CprType,
+      accountingCprNumber: undefined,
+      accountingNotifyTo: undefined,
+      accountingNote: undefined,
+      accountingAttachmentName: undefined,
+      accountingAttachmentFileExtension: undefined,
+      accountingAttachmentData: undefined,
+      ruleTags: undefined
+    })
   } catch (error) {
     toast.add({ 
       title: 'Fejl ved oprettelse', 
@@ -252,7 +309,7 @@ async function onSubmit(event: FormSubmitEvent<typeof ruleDraftSchema>) {
     </template>
 
     <template #body>
-      <UForm :schema="ruleDraftSchema" :state="state" @submit="onSubmit">
+      <UForm ref="formRef" :schema="stepSchema" :state="state" @submit="onSubmit">
         <UStepper v-model="currentStep" :items="steps" class="mb-6">
           <template #content="{ item }">
             <USeparator class="mb-6" />
@@ -495,10 +552,10 @@ async function onSubmit(event: FormSubmitEvent<typeof ruleDraftSchema>) {
             :disabled="currentStep === 0"
           />
           <template v-if="currentStep === steps.length - 1">
-            <UButton type="submit">Opret regel</UButton>
+            <UButton type="submit" :disabled="!isStepValid">Opret regel</UButton>
           </template>
           <template v-else>
-            <UButton label="Næste" color="primary" @click="handleNext" />
+            <UButton label="Næste" color="primary" @click="handleNext" :disabled="!isStepValid"/>
           </template>
         </div>
       </UForm>

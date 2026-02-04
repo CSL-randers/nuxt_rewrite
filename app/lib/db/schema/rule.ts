@@ -200,6 +200,29 @@ export const ruleMatchingSchema = z.object({
   matches: z.array(matchEntrySchema).optional(),
   matchAmountMin: z.number().optional(),
   matchAmountMax: z.number().optional(),
+}).refine(
+  data =>
+    data.matchAmountMin == null ||
+    data.matchAmountMax == null ||
+    data.matchAmountMin <= data.matchAmountMax,
+  {
+    message: 'Minimumsbeløb må ikke være større end maksimumsbeløb',
+    path: ['matchAmountMax']
+  }
+)
+
+export const ruleAccountingSchema = z.object({
+  accountingPrimaryAccount: z.string().min(1, "Primær konto er påkrævet"),
+  accountingSecondaryAccount: z.string().optional(),
+  accountingTertiaryAccount: z.string().optional(),
+  accountingText: z.string().optional(),
+  accountingCprType: z.enum(cprTypeValues),
+  accountingCprNumber: z.string().optional(),
+  accountingNotifyTo: z.string().email("Ugyldig email").optional().or(z.literal("")),
+  accountingNote: z.string().optional(),
+  accountingAttachmentName: z.array(z.string()).optional(),
+  accountingAttachmentFileExtension: z.array(z.string()).optional(),
+  accountingAttachmentData: z.array(z.string()).optional(),
 })
 
 export const ruleSelectSchema = createSelectSchema(Rule)
