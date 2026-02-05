@@ -1,0 +1,1193 @@
+{
+  "id": "8a00a319-bab7-4820-ba01-436b42f9babd",
+  "prevId": "00000000-0000-0000-0000-000000000000",
+  "version": "7",
+  "dialect": "postgresql",
+  "tables": {
+    "public.account": {
+      "name": "account",
+      "schema": "",
+      "columns": {
+        "id": {
+          "name": "id",
+          "type": "text",
+          "primaryKey": true,
+          "notNull": true
+        },
+        "statusAccount": {
+          "name": "statusAccount",
+          "type": "integer",
+          "primaryKey": false,
+          "notNull": true
+        }
+      },
+      "indexes": {},
+      "foreignKeys": {},
+      "compositePrimaryKeys": {},
+      "uniqueConstraints": {},
+      "policies": {},
+      "checkConstraints": {},
+      "isRLSEnabled": false
+    },
+    "public.banking_request": {
+      "name": "banking_request",
+      "schema": "",
+      "columns": {
+        "id": {
+          "name": "id",
+          "type": "text",
+          "primaryKey": true,
+          "notNull": true
+        },
+        "runId": {
+          "name": "runId",
+          "type": "uuid",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "payload": {
+          "name": "payload",
+          "type": "json",
+          "primaryKey": false,
+          "notNull": false
+        }
+      },
+      "indexes": {},
+      "foreignKeys": {
+        "banking_request_runId_run_id_fk": {
+          "name": "banking_request_runId_run_id_fk",
+          "tableFrom": "banking_request",
+          "tableTo": "run",
+          "columnsFrom": [
+            "runId"
+          ],
+          "columnsTo": [
+            "id"
+          ],
+          "onDelete": "no action",
+          "onUpdate": "no action"
+        }
+      },
+      "compositePrimaryKeys": {},
+      "uniqueConstraints": {},
+      "policies": {},
+      "checkConstraints": {},
+      "isRLSEnabled": false
+    },
+    "public.banking_response": {
+      "name": "banking_response",
+      "schema": "",
+      "columns": {
+        "id": {
+          "name": "id",
+          "type": "text",
+          "primaryKey": true,
+          "notNull": true
+        },
+        "requestId": {
+          "name": "requestId",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "runId": {
+          "name": "runId",
+          "type": "uuid",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "status": {
+          "name": "status",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "error": {
+          "name": "error",
+          "type": "text[]",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "transactions": {
+          "name": "transactions",
+          "type": "json[]",
+          "primaryKey": false,
+          "notNull": false
+        }
+      },
+      "indexes": {},
+      "foreignKeys": {
+        "banking_response_requestId_banking_request_id_fk": {
+          "name": "banking_response_requestId_banking_request_id_fk",
+          "tableFrom": "banking_response",
+          "tableTo": "banking_request",
+          "columnsFrom": [
+            "requestId"
+          ],
+          "columnsTo": [
+            "id"
+          ],
+          "onDelete": "no action",
+          "onUpdate": "no action"
+        },
+        "banking_response_runId_run_id_fk": {
+          "name": "banking_response_runId_run_id_fk",
+          "tableFrom": "banking_response",
+          "tableTo": "run",
+          "columnsFrom": [
+            "runId"
+          ],
+          "columnsTo": [
+            "id"
+          ],
+          "onDelete": "no action",
+          "onUpdate": "no action"
+        }
+      },
+      "compositePrimaryKeys": {},
+      "uniqueConstraints": {
+        "banking_response_requestId_unique": {
+          "name": "banking_response_requestId_unique",
+          "nullsNotDistinct": false,
+          "columns": [
+            "requestId"
+          ]
+        }
+      },
+      "policies": {},
+      "checkConstraints": {},
+      "isRLSEnabled": false
+    },
+    "public.document": {
+      "name": "document",
+      "schema": "",
+      "columns": {
+        "id": {
+          "name": "id",
+          "type": "uuid",
+          "primaryKey": true,
+          "notNull": true,
+          "default": "gen_random_uuid()"
+        },
+        "type": {
+          "name": "type",
+          "type": "document_type",
+          "typeSchema": "public",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "bookingDate": {
+          "name": "bookingDate",
+          "type": "date",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "content": {
+          "name": "content",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "filename": {
+          "name": "filename",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "fileExtension": {
+          "name": "fileExtension",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true
+        }
+      },
+      "indexes": {},
+      "foreignKeys": {},
+      "compositePrimaryKeys": {},
+      "uniqueConstraints": {},
+      "policies": {},
+      "checkConstraints": {},
+      "isRLSEnabled": false
+    },
+    "public.erp_request": {
+      "name": "erp_request",
+      "schema": "",
+      "columns": {
+        "id": {
+          "name": "id",
+          "type": "text",
+          "primaryKey": true,
+          "notNull": true
+        },
+        "runId": {
+          "name": "runId",
+          "type": "uuid",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "payload": {
+          "name": "payload",
+          "type": "json",
+          "primaryKey": false,
+          "notNull": false
+        }
+      },
+      "indexes": {},
+      "foreignKeys": {
+        "erp_request_runId_run_id_fk": {
+          "name": "erp_request_runId_run_id_fk",
+          "tableFrom": "erp_request",
+          "tableTo": "run",
+          "columnsFrom": [
+            "runId"
+          ],
+          "columnsTo": [
+            "id"
+          ],
+          "onDelete": "no action",
+          "onUpdate": "no action"
+        }
+      },
+      "compositePrimaryKeys": {},
+      "uniqueConstraints": {},
+      "policies": {},
+      "checkConstraints": {},
+      "isRLSEnabled": false
+    },
+    "public.erp_response": {
+      "name": "erp_response",
+      "schema": "",
+      "columns": {
+        "id": {
+          "name": "id",
+          "type": "text",
+          "primaryKey": true,
+          "notNull": true
+        },
+        "requestId": {
+          "name": "requestId",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "runId": {
+          "name": "runId",
+          "type": "uuid",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "status": {
+          "name": "status",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "error": {
+          "name": "error",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "payload": {
+          "name": "payload",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": false
+        }
+      },
+      "indexes": {},
+      "foreignKeys": {
+        "erp_response_requestId_erp_request_id_fk": {
+          "name": "erp_response_requestId_erp_request_id_fk",
+          "tableFrom": "erp_response",
+          "tableTo": "erp_request",
+          "columnsFrom": [
+            "requestId"
+          ],
+          "columnsTo": [
+            "id"
+          ],
+          "onDelete": "no action",
+          "onUpdate": "no action"
+        },
+        "erp_response_runId_run_id_fk": {
+          "name": "erp_response_runId_run_id_fk",
+          "tableFrom": "erp_response",
+          "tableTo": "run",
+          "columnsFrom": [
+            "runId"
+          ],
+          "columnsTo": [
+            "id"
+          ],
+          "onDelete": "no action",
+          "onUpdate": "no action"
+        }
+      },
+      "compositePrimaryKeys": {},
+      "uniqueConstraints": {
+        "erp_response_requestId_unique": {
+          "name": "erp_response_requestId_unique",
+          "nullsNotDistinct": false,
+          "columns": [
+            "requestId"
+          ]
+        }
+      },
+      "policies": {},
+      "checkConstraints": {},
+      "isRLSEnabled": false
+    },
+    "public.rule": {
+      "name": "rule",
+      "schema": "",
+      "columns": {
+        "id": {
+          "name": "id",
+          "type": "integer",
+          "primaryKey": true,
+          "notNull": true,
+          "identity": {
+            "type": "always",
+            "name": "rule_id_seq",
+            "schema": "public",
+            "increment": "1",
+            "startWith": "1",
+            "minValue": "1",
+            "maxValue": "2147483647",
+            "cache": "1",
+            "cycle": false
+          }
+        },
+        "lastUsed": {
+          "name": "lastUsed",
+          "type": "date",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "createdAt": {
+          "name": "createdAt",
+          "type": "date",
+          "primaryKey": false,
+          "notNull": false,
+          "default": "now()"
+        },
+        "updatedAt": {
+          "name": "updatedAt",
+          "type": "date",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "lockedAt": {
+          "name": "lockedAt",
+          "type": "date",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "lockedBy": {
+          "name": "lockedBy",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "currentVersionId": {
+          "name": "currentVersionId",
+          "type": "bigint",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "type": {
+          "name": "type",
+          "type": "rule_type",
+          "typeSchema": "public",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "status": {
+          "name": "status",
+          "type": "rule_status",
+          "typeSchema": "public",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "matchText": {
+          "name": "matchText",
+          "type": "text[]",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "matchPrimaryReference": {
+          "name": "matchPrimaryReference",
+          "type": "text[]",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "matchId": {
+          "name": "matchId",
+          "type": "text[]",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "matchBatch": {
+          "name": "matchBatch",
+          "type": "text[]",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "matchEndToEndId": {
+          "name": "matchEndToEndId",
+          "type": "text[]",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "matchOcrReference": {
+          "name": "matchOcrReference",
+          "type": "text[]",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "matchDebtorsPaymentId": {
+          "name": "matchDebtorsPaymentId",
+          "type": "text[]",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "matchDebtorText": {
+          "name": "matchDebtorText",
+          "type": "text[]",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "matchDebtorMessage": {
+          "name": "matchDebtorMessage",
+          "type": "text[]",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "matchCreditorText": {
+          "name": "matchCreditorText",
+          "type": "text[]",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "matchCreditorMessage": {
+          "name": "matchCreditorMessage",
+          "type": "text[]",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "matchDebtorId": {
+          "name": "matchDebtorId",
+          "type": "text[]",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "matchDebtorName": {
+          "name": "matchDebtorName",
+          "type": "text[]",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "matchCreditorId": {
+          "name": "matchCreditorId",
+          "type": "text[]",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "matchCreditorName": {
+          "name": "matchCreditorName",
+          "type": "text[]",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "matchType": {
+          "name": "matchType",
+          "type": "text[]",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "matchTxDomain": {
+          "name": "matchTxDomain",
+          "type": "text[]",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "matchTxFamily": {
+          "name": "matchTxFamily",
+          "type": "text[]",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "matchTxSubFamily": {
+          "name": "matchTxSubFamily",
+          "type": "text[]",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "matchAmountMin": {
+          "name": "matchAmountMin",
+          "type": "numeric",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "matchAmountMax": {
+          "name": "matchAmountMax",
+          "type": "numeric",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "accountingPrimaryAccount": {
+          "name": "accountingPrimaryAccount",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "accountingSecondaryAccount": {
+          "name": "accountingSecondaryAccount",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "accountingTertiaryAccount": {
+          "name": "accountingTertiaryAccount",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "accountingText": {
+          "name": "accountingText",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "accountingCprType": {
+          "name": "accountingCprType",
+          "type": "cpr_type",
+          "typeSchema": "public",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "accountingCprNumber": {
+          "name": "accountingCprNumber",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "accountingNotifyTo": {
+          "name": "accountingNotifyTo",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "accountingNote": {
+          "name": "accountingNote",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "accountingAttachmentName": {
+          "name": "accountingAttachmentName",
+          "type": "text[]",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "accountingAttachmentFileExtension": {
+          "name": "accountingAttachmentFileExtension",
+          "type": "text[]",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "accountingAttachmentData": {
+          "name": "accountingAttachmentData",
+          "type": "text[]",
+          "primaryKey": false,
+          "notNull": false
+        }
+      },
+      "indexes": {},
+      "foreignKeys": {},
+      "compositePrimaryKeys": {},
+      "uniqueConstraints": {},
+      "policies": {},
+      "checkConstraints": {},
+      "isRLSEnabled": false
+    },
+    "public.rule_bank_account": {
+      "name": "rule_bank_account",
+      "schema": "",
+      "columns": {
+        "ruleId": {
+          "name": "ruleId",
+          "type": "integer",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "bankAccountId": {
+          "name": "bankAccountId",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true
+        }
+      },
+      "indexes": {},
+      "foreignKeys": {
+        "rule_bank_account_ruleId_rule_id_fk": {
+          "name": "rule_bank_account_ruleId_rule_id_fk",
+          "tableFrom": "rule_bank_account",
+          "tableTo": "rule",
+          "columnsFrom": [
+            "ruleId"
+          ],
+          "columnsTo": [
+            "id"
+          ],
+          "onDelete": "cascade",
+          "onUpdate": "no action"
+        },
+        "rule_bank_account_bankAccountId_account_id_fk": {
+          "name": "rule_bank_account_bankAccountId_account_id_fk",
+          "tableFrom": "rule_bank_account",
+          "tableTo": "account",
+          "columnsFrom": [
+            "bankAccountId"
+          ],
+          "columnsTo": [
+            "id"
+          ],
+          "onDelete": "cascade",
+          "onUpdate": "no action"
+        }
+      },
+      "compositePrimaryKeys": {
+        "rule_bank_account_ruleId_bankAccountId_pk": {
+          "name": "rule_bank_account_ruleId_bankAccountId_pk",
+          "columns": [
+            "ruleId",
+            "bankAccountId"
+          ]
+        }
+      },
+      "uniqueConstraints": {},
+      "policies": {},
+      "checkConstraints": {},
+      "isRLSEnabled": false
+    },
+    "public.rule_rule_tag": {
+      "name": "rule_rule_tag",
+      "schema": "",
+      "columns": {
+        "ruleId": {
+          "name": "ruleId",
+          "type": "integer",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "ruleTagId": {
+          "name": "ruleTagId",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true
+        }
+      },
+      "indexes": {},
+      "foreignKeys": {
+        "rule_rule_tag_ruleId_rule_id_fk": {
+          "name": "rule_rule_tag_ruleId_rule_id_fk",
+          "tableFrom": "rule_rule_tag",
+          "tableTo": "rule",
+          "columnsFrom": [
+            "ruleId"
+          ],
+          "columnsTo": [
+            "id"
+          ],
+          "onDelete": "cascade",
+          "onUpdate": "no action"
+        },
+        "rule_rule_tag_ruleTagId_rule_tag_id_fk": {
+          "name": "rule_rule_tag_ruleTagId_rule_tag_id_fk",
+          "tableFrom": "rule_rule_tag",
+          "tableTo": "rule_tag",
+          "columnsFrom": [
+            "ruleTagId"
+          ],
+          "columnsTo": [
+            "id"
+          ],
+          "onDelete": "cascade",
+          "onUpdate": "no action"
+        }
+      },
+      "compositePrimaryKeys": {
+        "rule_rule_tag_ruleId_ruleTagId_pk": {
+          "name": "rule_rule_tag_ruleId_ruleTagId_pk",
+          "columns": [
+            "ruleId",
+            "ruleTagId"
+          ]
+        }
+      },
+      "uniqueConstraints": {},
+      "policies": {},
+      "checkConstraints": {},
+      "isRLSEnabled": false
+    },
+    "public.rule_tag": {
+      "name": "rule_tag",
+      "schema": "",
+      "columns": {
+        "id": {
+          "name": "id",
+          "type": "text",
+          "primaryKey": true,
+          "notNull": true
+        }
+      },
+      "indexes": {},
+      "foreignKeys": {},
+      "compositePrimaryKeys": {},
+      "uniqueConstraints": {},
+      "policies": {},
+      "checkConstraints": {},
+      "isRLSEnabled": false
+    },
+    "public.rule_version": {
+      "name": "rule_version",
+      "schema": "",
+      "columns": {
+        "id": {
+          "name": "id",
+          "type": "uuid",
+          "primaryKey": true,
+          "notNull": true,
+          "default": "gen_random_uuid()"
+        },
+        "ruleId": {
+          "name": "ruleId",
+          "type": "integer",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "version": {
+          "name": "version",
+          "type": "bigint",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "content": {
+          "name": "content",
+          "type": "jsonb",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "createdAt": {
+          "name": "createdAt",
+          "type": "date",
+          "primaryKey": false,
+          "notNull": false,
+          "default": "now()"
+        }
+      },
+      "indexes": {},
+      "foreignKeys": {
+        "rule_version_ruleId_rule_id_fk": {
+          "name": "rule_version_ruleId_rule_id_fk",
+          "tableFrom": "rule_version",
+          "tableTo": "rule",
+          "columnsFrom": [
+            "ruleId"
+          ],
+          "columnsTo": [
+            "id"
+          ],
+          "onDelete": "no action",
+          "onUpdate": "no action"
+        }
+      },
+      "compositePrimaryKeys": {},
+      "uniqueConstraints": {},
+      "policies": {},
+      "checkConstraints": {},
+      "isRLSEnabled": false
+    },
+    "public.run": {
+      "name": "run",
+      "schema": "",
+      "columns": {
+        "id": {
+          "name": "id",
+          "type": "uuid",
+          "primaryKey": true,
+          "notNull": true,
+          "default": "gen_random_uuid()"
+        },
+        "bookingDate": {
+          "name": "bookingDate",
+          "type": "date",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "status": {
+          "name": "status",
+          "type": "run_status",
+          "typeSchema": "public",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "errors": {
+          "name": "errors",
+          "type": "json[]",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "transactions": {
+          "name": "transactions",
+          "type": "json[]",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "docs": {
+          "name": "docs",
+          "type": "json[]",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "bankingRequests": {
+          "name": "bankingRequests",
+          "type": "json",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "bankingResponses": {
+          "name": "bankingResponses",
+          "type": "json",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "erpRequests": {
+          "name": "erpRequests",
+          "type": "json",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "erpResponses": {
+          "name": "erpResponses",
+          "type": "json",
+          "primaryKey": false,
+          "notNull": false
+        }
+      },
+      "indexes": {},
+      "foreignKeys": {},
+      "compositePrimaryKeys": {},
+      "uniqueConstraints": {},
+      "policies": {},
+      "checkConstraints": {},
+      "isRLSEnabled": false
+    },
+    "public.transaction": {
+      "name": "transaction",
+      "schema": "",
+      "columns": {
+        "sequence": {
+          "name": "sequence",
+          "type": "integer",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "bookingDate": {
+          "name": "bookingDate",
+          "type": "date",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "status": {
+          "name": "status",
+          "type": "booking_status",
+          "typeSchema": "public",
+          "primaryKey": false,
+          "notNull": true,
+          "default": "'åben'"
+        },
+        "ruleApplied": {
+          "name": "ruleApplied",
+          "type": "integer",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "lockedAt": {
+          "name": "lockedAt",
+          "type": "date",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "lockedBy": {
+          "name": "lockedBy",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "account": {
+          "name": "account",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "name": {
+          "name": "name",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "amount": {
+          "name": "amount",
+          "type": "numeric",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "type": {
+          "name": "type",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "text": {
+          "name": "text",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "primaryReference": {
+          "name": "primaryReference",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "id": {
+          "name": "id",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "batch": {
+          "name": "batch",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "endToEndId": {
+          "name": "endToEndId",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "ocrReference": {
+          "name": "ocrReference",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "debtorsPaymentId": {
+          "name": "debtorsPaymentId",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "debtorText": {
+          "name": "debtorText",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "debtorMessage": {
+          "name": "debtorMessage",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "creditorText": {
+          "name": "creditorText",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "creditorMessage": {
+          "name": "creditorMessage",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "debtorId": {
+          "name": "debtorId",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "debtorName": {
+          "name": "debtorName",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "creditorId": {
+          "name": "creditorId",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "creditorName": {
+          "name": "creditorName",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "txCodeDomain": {
+          "name": "txCodeDomain",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "txCodeFamily": {
+          "name": "txCodeFamily",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "txCodeSubFamily": {
+          "name": "txCodeSubFamily",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": false
+        }
+      },
+      "indexes": {
+        "transaction_id": {
+          "name": "transaction_id",
+          "columns": [
+            {
+              "expression": "account",
+              "isExpression": false,
+              "asc": true,
+              "nulls": "last"
+            },
+            {
+              "expression": "sequence",
+              "isExpression": false,
+              "asc": true,
+              "nulls": "last"
+            }
+          ],
+          "isUnique": true,
+          "concurrently": false,
+          "method": "btree",
+          "with": {}
+        }
+      },
+      "foreignKeys": {
+        "transaction_ruleApplied_rule_id_fk": {
+          "name": "transaction_ruleApplied_rule_id_fk",
+          "tableFrom": "transaction",
+          "tableTo": "rule",
+          "columnsFrom": [
+            "ruleApplied"
+          ],
+          "columnsTo": [
+            "id"
+          ],
+          "onDelete": "no action",
+          "onUpdate": "no action"
+        },
+        "transaction_account_account_id_fk": {
+          "name": "transaction_account_account_id_fk",
+          "tableFrom": "transaction",
+          "tableTo": "account",
+          "columnsFrom": [
+            "account"
+          ],
+          "columnsTo": [
+            "id"
+          ],
+          "onDelete": "no action",
+          "onUpdate": "no action"
+        }
+      },
+      "compositePrimaryKeys": {},
+      "uniqueConstraints": {},
+      "policies": {},
+      "checkConstraints": {},
+      "isRLSEnabled": false
+    }
+  },
+  "enums": {
+    "public.booking_status": {
+      "name": "booking_status",
+      "schema": "public",
+      "values": [
+        "bogført",
+        "åben"
+      ]
+    },
+    "public.cpr_type": {
+      "name": "cpr_type",
+      "schema": "public",
+      "values": [
+        "ingen",
+        "statisk",
+        "dynamisk"
+      ]
+    },
+    "public.document_type": {
+      "name": "document_type",
+      "schema": "public",
+      "values": [
+        "afstemning",
+        "postering"
+      ]
+    },
+    "public.erp_supplier": {
+      "name": "erp_supplier",
+      "schema": "public",
+      "values": [
+        "KMD",
+        "andet"
+      ]
+    },
+    "public.rule_status": {
+      "name": "rule_status",
+      "schema": "public",
+      "values": [
+        "aktiv",
+        "inaktiv"
+      ]
+    },
+    "public.rule_type": {
+      "name": "rule_type",
+      "schema": "public",
+      "values": [
+        "standard",
+        "undtagelse",
+        "engangs"
+      ]
+    },
+    "public.run_status": {
+      "name": "run_status",
+      "schema": "public",
+      "values": [
+        "afventer",
+        "indlæser",
+        "udført",
+        "fejl"
+      ]
+    }
+  },
+  "schemas": {},
+  "sequences": {},
+  "roles": {},
+  "policies": {},
+  "views": {},
+  "_meta": {
+    "columns": {},
+    "schemas": {},
+    "tables": {}
+  }
+}

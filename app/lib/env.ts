@@ -3,7 +3,6 @@ import { z } from "zod";
 import tryParseEnv from "./try-parse-env";
 
 const EnvSchema = z.object({
-  NODE_ENV: z.string(),
   POSTGRES_USER: z.string(),
   POSTGRES_PASSWORD: z.string(),
   POSTGRES_DB: z.string(),

@@ -3,7 +3,7 @@ import type { TableColumn } from '@nuxt/ui'
 import { upperFirst } from 'scule'
 import type { Row } from '@tanstack/table-core'
 import { getPaginationRowModel } from '@tanstack/table-core'
-import type { RuleTableRow, RuleListDto } from '~/lib/db/schema/index'
+import type { RuleListDto } from '~/lib/db/schema/index'
 import { ruleTypeEnum, ruleStatusEnum } from '~/lib/db/schema/index'
 import useFlattenArray from '~/composables/useFlattenArray'
 
@@ -17,7 +17,8 @@ const classMultiplePropsColumn = 'flex flex-col gap-1 text-sm'
 
 const toast = useToast()
 const table = useTemplateRef('table')
-
+const modalOpen = ref(false)
+const editingRuleId = ref<number | null>(null)
 const globalFilterValue = ref('')
 
 // API calls
@@ -30,7 +31,7 @@ const { data: rules, status } = await useFetch<RuleListDto[]>('/api/rules', {
 const typeLabelMap = Object.fromEntries(Object.values(ruleTypeEnum).map(v => [v, upperFirst(v)]))
 
 // Normaliser data til RuleTableRow
-const rows = computed<RuleTableRow[]>(() => {
+const rows = computed<RuleListDto[]>(() => {
   const flatRules = useFlattenArray<RuleListDto>(rules.value || [])
 
   return flatRules.map(rule => ({
@@ -40,10 +41,14 @@ const rows = computed<RuleTableRow[]>(() => {
 })
 
 // Dropdown-menu for actions
-function getRowItems(row: Row<RuleTableRow>) {
+function getRowItems(row: Row<RuleListDto>) {
   return [
     { type: 'label', label: 'Handlinger' },
-    { label: 'Rediger regel', icon: 'solar:ruler-cross-pen-bold-duotone' },
+    {
+      label: 'Rediger regel',
+      icon: 'solar:ruler-cross-pen-bold-duotone',
+      onSelect() { handleEditRule(row) }
+    },
     { type: 'separator' },
     {
       label: 'Slet regel',
@@ -69,7 +74,7 @@ const columnVisibility = ref({
   ruleTags_flat: false
 })
 
-const columns: TableColumn<RuleTableRow>[] = [
+const columns: TableColumn<RuleListDto>[] = [
   { // Selekteringskolonne
     id: 'Vælg',
     enableHiding: false,
@@ -145,7 +150,7 @@ const columns: TableColumn<RuleTableRow>[] = [
   },
   { // Matching references
     accessorKey: 'matching.references',
-    header: 'Søgeord',
+    header: 'Fritekst',
     cell: ({ row }) =>
       h('div', { class: classBadgeColumn },
         row.original.matching.references.map(text =>
@@ -155,7 +160,7 @@ const columns: TableColumn<RuleTableRow>[] = [
   },
   { // Matching counterparties
     accessorKey: 'matching.counterparties',
-    header: 'Modpart',
+    header: 'Part',
     cell: ({ row }) =>
       h('div', { class: classBadgeColumn },
         row.original.matching.counterparties.map(text =>
@@ -286,21 +291,32 @@ const typeDropdownItems = computed(() =>
   }))
 )
 
-watch(() => statusFilter.value, (newVal) => {
-  if (!table?.value?.tableApi) return
-  const statusColumn = table.value.tableApi.getColumn('status')
-  if (!statusColumn) return
-  statusColumn.setFilterValue(newVal === 'alle' ? undefined : newVal)
-})
+function bindEnumFilter(columnId: string, filterRef: Ref<string>) {
+  watch(filterRef, val => {
+    const col = table.value?.tableApi?.getColumn(columnId)
+    col?.setFilterValue(val === 'alle' ? undefined : val)
+  })
+}
 
-watch(() => typeFilter.value, (newVal) => {
-  if (!table?.value?.tableApi) return
-  const typeColumn = table.value.tableApi.getColumn('type')
-  if (!typeColumn) return
-  typeColumn.setFilterValue(newVal === 'alle' ? undefined : newVal)
-})
+bindEnumFilter('status', statusFilter)
+bindEnumFilter('type', typeFilter)
 
 const pagination = ref({ pageIndex: 0, pageSize: 20 })
+
+function handleAddRule() {
+  editingRuleId.value = null
+  modalOpen.value = true
+}
+
+function handleEditRule(row: Row<RuleListDto>) {
+  editingRuleId.value = row.original.id
+  modalOpen.value = true
+}
+
+function handleSaved() {
+  refreshNuxtData('rules')
+  modalOpen.value = false
+}
 </script>
 
 <template>
@@ -312,7 +328,11 @@ const pagination = ref({ pageIndex: 0, pageSize: 20 })
         </template>
 
         <template #right>
-          <RulesAddModal />
+          <RulesRuleModal
+            v-model:open="modalOpen"
+            @saved="handleSaved"
+            @click="handleAddRule"
+          />
         </template>
       </UDashboardNavbar>
     </template>
@@ -327,22 +347,6 @@ const pagination = ref({ pageIndex: 0, pageSize: 20 })
         />
 
         <div class="flex flex-wrap items-center gap-1.5">
-          <!-- <CustomersDeleteModal :count="table?.tableApi?.getFilteredSelectedRowModel().rows.length">
-            <UButton
-              v-if="table?.tableApi?.getFilteredSelectedRowModel().rows.length"
-              label="Delete"
-              color="error"
-              variant="subtle"
-              icon="solar:trash-bin-trash-bold-duotone"
-            >
-              <template #trailing>
-                <UKbd>
-                  {{ table?.tableApi?.getFilteredSelectedRowModel().rows.length }}
-                </UKbd>
-              </template>
-            </UButton>
-          </CustomersDeleteModal> -->
-
           <!-- Filtrering på status -->
           <UDropdownMenu
             :items="statusDropdownItems"

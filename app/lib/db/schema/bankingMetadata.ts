@@ -9,7 +9,6 @@ const bankingMetaData = pgTable('banking_master_data', {
   passcode: text() // Kunde Kode hos leverandøren, bruges til at lave token
 })
 
-
 export const bankingMetaDataInsertSchema = createInsertSchema(bankingMetaData)
 export const bankingMetaDataUpdateSchema = createUpdateSchema(bankingMetaData)
 export const bankingMetaDataSelectSchema = createSelectSchema(bankingMetaData)

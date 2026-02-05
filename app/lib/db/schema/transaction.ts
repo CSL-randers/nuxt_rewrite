@@ -2,8 +2,8 @@ import { z } from "zod"
 import { pgTable, text, integer, numeric, date, uniqueIndex } from "drizzle-orm/pg-core"
 import { createInsertSchema, createUpdateSchema, createSelectSchema } from "drizzle-zod"
 import { bookingStatusEnum } from "./enums"
-import { Account } from "./account"
-import { Rule } from "./rule"
+import { account } from "./account"
+import { rule } from "./rule"
 
 // Table is structured and mostly named after providers API response.entries[i] or 'SimpleAccountReportEntry'
 export const Transaction = pgTable('transaction', {
@@ -12,12 +12,12 @@ export const Transaction = pgTable('transaction', {
 
   // Metadata
   status: bookingStatusEnum().notNull().default("åben"),
-  ruleApplied: integer().references(() => Rule.id),
+  ruleApplied: integer().references(() => rule.id),
   lockedAt: date({ mode: "date" }),
   lockedBy: text(),
   
   // Generic info
-  account: text().notNull().references(() => Account.id),
+  account: text().notNull().references(() => account.id),
   name: text().notNull(),
   amount: numeric().notNull(),
   type: text(),

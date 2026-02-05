@@ -1,6 +1,5 @@
 <script setup lang="ts">
 import type { FormSubmitEvent } from '@nuxt/ui'
-import { z } from 'zod'
 import type {
   AccountSelectSchema,
   RuleDraftSchema,
@@ -19,17 +18,31 @@ import {
   matchCategories,
   matchCategoryColumns,
   mapMatchesToDbArrays,
-  ruleDraftSchema,
   ruleBasicSchema,
   ruleMatchingSchema,
   ruleAccountingSchema
 } from '~/lib/db/schema/index'
 
-const open = ref(false)
+const props = defineProps<{
+  open?: boolean
+  ruleId?: number | null
+}>()
+
+const isEdit = computed(() => props.ruleId != null)
+
+const emit = defineEmits<{
+  (e: 'update:open', value: boolean): void
+  (e: 'saved'): void
+}>()
+
+const open = computed({
+  get: () => props.open ?? false,
+  set: v => emit('update:open', v)
+})
+
 const currentStep = ref(0)
 const toast = useToast()
 const formRef = ref<any>()
-const isStepValid = ref(true)
 
 const steps = [
   { id: 'basic', title: 'Basis', description: 'Vælg type, status og bankkonto' },
@@ -37,9 +50,37 @@ const steps = [
   { id: 'accounting', title: 'Kontering', description: 'Angiv oplysninger relevant for bogføringen' }
 ]
 
-// ---------------------
+// --------------------
+// Load rule if editing
+// --------------------
+const isLocked = computed(() => {
+  // Hvis lockedAt eksisterer og stadig er indenfor timeout (fx 5 minutter)
+  if (!state.lockedAt) return false
+  const lockTime = new Date(state.lockedAt).getTime()
+  const now = Date.now()
+  return now - lockTime < 5 * 60 * 1000
+})
+
+function hydrateDraft(rule: RuleDraftSchema & { matches?: MatchEntry[] }) {
+  Object.assign(state, {
+    ...rule,
+    matches: undefined
+  })
+
+  matches.value = rule.matches ?? []
+}
+
+watchEffect(async () => {
+  if (!props.ruleId) return
+  
+  const data = await $fetch<RuleDraftSchema>(`/api/rule/${props.ruleId}`)
+  
+  hydrateDraft(data)
+})
+
+// ---------------
 // Fetch rule tags
-// ---------------------
+// ---------------
 type RuleTag = { id: string; name: string }
 const { data: ruleTagsData } = await useFetch<RuleTag[]>('/api/rule-tags', { key: 'ruletags' })
 const ruleTagOptions = computed(() =>
@@ -129,32 +170,43 @@ const handleAttachmentUpdate = (value: AttachmentPayload | null) => {
   attachments.value = value
 }
 
-// --------------
-// State creation
-// --------------
-type RuleDraftUiState = Omit<RuleDraftSchema, 'matches'> & {
+// -----------------------
+// State & schema creation
+// -----------------------
+type RuleDraftUiState = Omit<RuleDraftSchema, 'matches' | 'currentVersionId'> & {
   matches?: MatchEntry[]
 }
 
-const state = reactive<Partial<RuleDraftUiState>>({
-  type: 'standard' as RuleType,
-  status: 'aktiv' as RuleStatus,
-  relatedBankAccounts: [],
-  matchAmountMin: undefined,
-  matchAmountMax: undefined,
-  accountingPrimaryAccount: undefined,
-  accountingSecondaryAccount: undefined,
-  accountingTertiaryAccount: undefined,
-  accountingText: undefined,
-  accountingCprType: 'ingen' as CprType,
-  accountingCprNumber: undefined,
-  accountingNotifyTo: undefined,
-  accountingNote: undefined,
-  accountingAttachmentName: undefined,
-  accountingAttachmentFileExtension: undefined,
-  accountingAttachmentData: undefined,
-  ruleTags: undefined
-})
+function createEmptyDraft(): RuleDraftUiState {
+  return {
+    type: 'standard' as RuleType,
+    status: 'aktiv' as RuleStatus,
+    lockedAt: undefined,
+    relatedBankAccounts: [],
+    matchAmountMin: undefined,
+    matchAmountMax: undefined,
+    accountingPrimaryAccount: '',
+    accountingSecondaryAccount: undefined,
+    accountingTertiaryAccount: undefined,
+    accountingText: undefined,
+    accountingCprType: 'ingen' as CprType,
+    accountingCprNumber: undefined,
+    accountingNotifyTo: undefined,
+    accountingNote: undefined,
+    accountingAttachmentName: undefined,
+    accountingAttachmentFileExtension: undefined,
+    accountingAttachmentData: undefined,
+    ruleTags: undefined
+  }
+}
+
+const state = reactive<RuleDraftUiState>(createEmptyDraft())
+
+function resetForm() {
+  Object.assign(state, createEmptyDraft())
+  matches.value = []
+  currentStep.value = 0
+}
 
 const stepSchema = computed(() => {
   switch (currentStep.value) {
@@ -169,11 +221,10 @@ const stepSchema = computed(() => {
   }
 })
 
-export const ruleSubmitSchema = z
-  .object({})
-  .and(ruleBasicSchema)
-  .and(ruleMatchingSchema)
-  .and(ruleAccountingSchema)
+const ruleSubmitSchema =
+  ruleBasicSchema
+    .and(ruleMatchingSchema)
+    .and(ruleAccountingSchema)
 
 // ------------------------------------------
 // Options to USelect og USelectMenu elements
@@ -224,7 +275,6 @@ const matchCategoryOptions = computed(() => {
 // ---------------
 const handleNext = async () => {
   const valid = await formRef.value.validate({ schema: stepSchema.value })
-  isStepValid.value = valid
   if (!valid) return
 
   currentStep.value++
@@ -254,42 +304,32 @@ async function onSubmit(event: FormSubmitEvent<typeof ruleSubmitSchema>) {
   console.log('Submitting form with payload:', payload)
 
   try {
-    await $fetch<RuleDraftSchema>('/api/rule', {
-      method: 'POST',
-      body: payload
-    })
-
-    console.log('Form submitted:', payload)
-
-    toast.add({ title: 'Regel oprettet', description: 'Den nye regel er blevet oprettet.' })
+    if (isEdit.value && props.ruleId) {
+      // PUT til /api/rule/{id}
+      await $fetch<RuleDraftSchema>(`/api/rule/${props.ruleId}`, {
+        method: 'PUT',
+        body: payload
+      })
+      toast.add({ title: 'Regel opdateret', description: 'Reglen er blevet opdateret.' })
+    } else {
+      // POST til /api/rule
+      await $fetch<RuleDraftSchema>('/api/rule', {
+        method: 'POST',
+        body: payload
+      })
+      toast.add({ title: 'Regel oprettet', description: 'Den nye regel er blevet oprettet.' })
+    }
     open.value = false
+    emit('saved')
 
-    // Reset state
+    // Reset
     currentStep.value = 0
     matches.value = []
-    Object.assign(state, {
-      type: 'standard' as RuleType,
-      status: 'aktiv' as RuleStatus,
-      relatedBankAccounts: [],
-      matchAmountMin: undefined,
-      matchAmountMax: undefined,
-      accountingPrimaryAccount: undefined,
-      accountingSecondaryAccount: undefined,
-      accountingTertiaryAccount: undefined,
-      accountingText: undefined,
-      accountingCprType: 'ingen' as CprType,
-      accountingCprNumber: undefined,
-      accountingNotifyTo: undefined,
-      accountingNote: undefined,
-      accountingAttachmentName: undefined,
-      accountingAttachmentFileExtension: undefined,
-      accountingAttachmentData: undefined,
-      ruleTags: undefined
-    })
+    resetForm()
   } catch (error) {
     toast.add({ 
-      title: 'Fejl ved oprettelse', 
-      description: 'Der skete en fejl da reglen blev gemt.',
+      title: 'Fejl', 
+      description: isEdit.value ? 'Fejl ved opdatering.' : 'Fejl ved oprettelse.',
       color: 'error'
     })
   }
@@ -297,19 +337,28 @@ async function onSubmit(event: FormSubmitEvent<typeof ruleSubmitSchema>) {
 </script>
 
 <template>
-  <UModal v-model:open="open" title="Ny regel">
+  <UModal v-model:open="open" :title="isEdit ? 'Rediger regel' : 'Ny regel'">
     <template #header>
       <div class="flex items-center justify-between">
-        <h2 class="text-lg font-semibold">Ny regel</h2>
+        <h2 class="text-lg font-semibold">
+          {{ isEdit ? `Rediger regel ${props.ruleId}` : 'Ny regel' }}
+        </h2>
       </div>
     </template>
 
     <template #default>
-      <UButton class="font-bold rounded-full" icon="i-lucide-plus" label="Ny regel" @click="open = true" />
+      <UButton
+        class="font-bold rounded-full"
+        icon="i-lucide-plus"
+        :label="'Ny regel'"
+        @click="open = true"
+      />
     </template>
-
     <template #body>
-      <UForm ref="formRef" :schema="stepSchema" :state="state" @submit="onSubmit">
+      <div v-if="isLocked" class="bg-yellow-100 dark:bg-yellow-900/30 p-2 mb-4 rounded border border-yellow-400 dark:border-yellow-700">
+        Denne regel redigeres i øjeblikket af en anden bruger.
+      </div>
+      <UForm ref="formRef" :schema="stepSchema" :state="state" @submit="onSubmit" :disabled="isLocked">
         <UStepper v-model="currentStep" :items="steps" class="mb-6">
           <template #content="{ item }">
             <USeparator class="mb-6" />
@@ -338,7 +387,7 @@ async function onSubmit(event: FormSubmitEvent<typeof ruleSubmitSchema>) {
                   />
                 </UFormField>
                 <UFormField label="Bankkonto" name="relatedBankAccounts" required>
-                  <USelectMenu
+                  <UInputMenu
                     v-model="state.relatedBankAccounts"
                     :items="accountOptions"
                     multiple
@@ -349,7 +398,7 @@ async function onSubmit(event: FormSubmitEvent<typeof ruleSubmitSchema>) {
                   />
                 </UFormField>
                 <UFormField label="Tags" name="ruleTags">
-                  <USelectMenu
+                  <UInputMenu
                     v-model="state.ruleTags"
                     :items="ruleTagOptions"
                     multiple
@@ -552,10 +601,12 @@ async function onSubmit(event: FormSubmitEvent<typeof ruleSubmitSchema>) {
             :disabled="currentStep === 0"
           />
           <template v-if="currentStep === steps.length - 1">
-            <UButton type="submit" :disabled="!isStepValid">Opret regel</UButton>
+            <UButton type="submit">
+              {{ isEdit ? 'Opdater regel' : 'Opret regel' }}
+            </UButton>
           </template>
           <template v-else>
-            <UButton label="Næste" color="primary" @click="handleNext" :disabled="!isStepValid"/>
+            <UButton label="Næste" color="primary" @click="handleNext"/>
           </template>
         </div>
       </UForm>
