@@ -1,33 +1,93 @@
 import { defineEventHandler, readBody, createError } from 'h3'
 import { createInsertSchema } from 'drizzle-zod'
-import { rule, ruleBankAccount, ruleRuleTag, mapMatchesToDbArrays, ruleDraftSchema, ruleVersion, RuleVersionInsertSchema } from '~/lib/db/schema/index'
+import {
+  rule,
+  ruleBankAccount,
+  ruleRuleTag,
+  mapMatchesToConditionRows,
+  ruleDraftSchema,
+  ruleVersion,
+  RuleVersionInsertSchema,
+  ruleBankingCondition,
+  kmdAccountingParameters,
+  kmdAttachment
+} from '~/lib/db/schema/index'
 import type { RuleDraftSchema } from '~/lib/db/schema'
 import db from '~/lib/db'
 
 const version = 1
 
 export function compileRuleDraftToDb(draft: RuleDraftSchema) {
-  // Konverter matches til DB-kolonner
-  const matchColumns = mapMatchesToDbArrays(draft.matches ?? [])
+  const {
+    matches,
+    relatedBankAccounts,
+    ruleTags,
+    accountingPrimaryAccount,
+    accountingSecondaryAccount,
+    accountingTertiaryAccount,
+    accountingText,
+    accountingCprType,
+    accountingCprNumber,
+    accountingNotifyTo,
+    accountingNote,
+    accountingAttachmentName,
+    accountingAttachmentFileExtension,
+    accountingAttachmentData,
+    ...rest
+  } = draft
 
-  // Opret payload ved at sprede alt fra draft, men fjerne matches
-  const { matches, relatedBankAccounts, ruleTags, ...rest } = draft
+  const conditionRows = mapMatchesToConditionRows(matches ?? [])
   const bankAccountIds = Array.from(new Set(relatedBankAccounts))
   const tagIds = Array.from(new Set(ruleTags ?? []))
   const ruleData = {
     ...rest,
-    ...matchColumns,
     currentVersionId: version
+  }
+
+  const attachments: Array<{ name: string; fileExtension: string; data: string }> = []
+  const maxAttachments = Math.max(
+    accountingAttachmentName?.length ?? 0,
+    accountingAttachmentFileExtension?.length ?? 0,
+    accountingAttachmentData?.length ?? 0
+  )
+
+  for (let i = 0; i < maxAttachments; i++) {
+    const name = accountingAttachmentName?.[i]
+    const fileExtension = accountingAttachmentFileExtension?.[i]
+    const data = accountingAttachmentData?.[i]
+
+    if (name && fileExtension && data) {
+      attachments.push({ name, fileExtension, data })
+    }
+  }
+
+  const accountingParameters = {
+    primaryAccount: accountingPrimaryAccount,
+    secondaryAccount: accountingSecondaryAccount,
+    tertiaryAccount: accountingTertiaryAccount,
+    bookingText: accountingText,
+    cprType: accountingCprType,
+    cprNumber: accountingCprNumber,
+    notifyTo: accountingNotifyTo?.length ? accountingNotifyTo : null,
+    note: accountingNote,
   }
 
   return {
     ruleData,
     bankAccountIds,
     tagIds,
+    conditionRows,
+    accountingParameters,
+    attachments,
     versionContent: {
       ...ruleData,
       relatedBankAccounts: bankAccountIds,
-      ruleTags: tagIds
+      ruleTags: tagIds,
+      matches: matches ?? [],
+      accounting: {
+        ...accountingParameters,
+        attachments
+      }
     }
   }
 }
@@ -38,50 +98,67 @@ export default defineEventHandler(async (event) => {
     console.log('[rule.post] incoming body', body)
     const draft = ruleDraftSchema.parse(body)
     console.log('[rule.post] parsed draft', draft)
-    const { ruleData, bankAccountIds, tagIds, versionContent } = compileRuleDraftToDb(draft)
+    const { ruleData, bankAccountIds, tagIds, conditionRows, accountingParameters, attachments, versionContent } = compileRuleDraftToDb(draft)
     console.log('[rule.post] compiled payload', { ruleData, bankAccountIds, tagIds })
 
-    // -----------------------
-    // Indsæt ny regel i rule tabellen
-    // -----------------------
     const validatedRule = createInsertSchema(rule).parse(ruleData)
-    const insertedRule = await db.insert(rule).values(validatedRule).returning()
-    console.log('[rule.post] inserted rule row', insertedRule)
 
-    if (!insertedRule[0]) {
-      throw createError({ statusCode: 500, statusMessage: 'Fejl ved oprettelse af regel' })
-    }
+    const { ruleId } = await db.transaction(async (tx) => {
+      const insertedRule = await tx.insert(rule).values(validatedRule).returning()
+      if (!insertedRule[0]) {
+        throw createError({ statusCode: 500, statusMessage: 'Fejl ved oprettelse af regel' })
+      }
 
-    const ruleId = insertedRule[0].id
+      const newRuleId = insertedRule[0].id
 
-    // -----------------------
-    // Tilknyt bankkonti og tags
-    // -----------------------
-    if (bankAccountIds.length) {
-      await db.insert(ruleBankAccount).values(
-        bankAccountIds.map(bankAccountId => ({ ruleId, bankAccountId }))
-      )
-      console.log('[rule.post] linked bank accounts', bankAccountIds)
-    }
+      if (bankAccountIds.length) {
+        await tx.insert(ruleBankAccount).values(
+          bankAccountIds.map(bankAccountId => ({ ruleId: newRuleId, bankAccountId }))
+        )
+        console.log('[rule.post] linked bank accounts', bankAccountIds)
+      }
 
-    if (tagIds.length) {
-      await db.insert(ruleRuleTag).values(
-        tagIds.map(ruleTagId => ({ ruleId, ruleTagId }))
-      )
-      console.log('[rule.post] linked tags', tagIds)
-    }
+      if (tagIds.length) {
+        await tx.insert(ruleRuleTag).values(
+          tagIds.map(ruleTagId => ({ ruleId: newRuleId, ruleTagId }))
+        )
+        console.log('[rule.post] linked tags', tagIds)
+      }
 
-    // -----------------------
-    // Opret rule_version
-    // -----------------------
-    const versionPayload: RuleVersionInsertSchema = {
-      ruleId,
-      version,
-      content: versionContent
-    }
+      if (conditionRows.length) {
+        await tx.insert(ruleBankingCondition).values(
+          conditionRows.map(condition => ({
+            ...condition,
+            ruleId: newRuleId,
+          }))
+        )
+      }
 
-    await db.insert(ruleVersion).values(versionPayload)
-    console.log('[rule.post] inserted rule version', versionPayload)
+      const [parameterRow] = await tx.insert(kmdAccountingParameters).values({
+        ...accountingParameters,
+        ruleId: newRuleId,
+      }).returning()
+
+      if (parameterRow?.id && attachments.length) {
+        await tx.insert(kmdAttachment).values(
+          attachments.map(attachment => ({
+            ...attachment,
+            parameterId: parameterRow.id,
+          }))
+        )
+      }
+
+      const versionPayload: RuleVersionInsertSchema = {
+        ruleId: newRuleId,
+        version,
+        content: versionContent
+      }
+
+      await tx.insert(ruleVersion).values(versionPayload)
+      console.log('[rule.post] inserted rule version', versionPayload)
+
+      return { ruleId: newRuleId }
+    })
 
     const storage = useStorage('rules')
     await storage.removeItem('rule-list')

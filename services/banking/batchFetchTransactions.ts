@@ -1,12 +1,10 @@
 import crypto from "crypto";
 import { db } from "~app/lib/db/index";
-import { Account, bankingMetaData } from "~app/lib/db/schema/index";
-import { useFetch } from "#imports"; // Nuxt 3 auto-import
+import { Account } from "~app/lib/db/schema/index";
+import { bankingIntegrationMetadata, type BankingIntegrationMetadata } from "~app/lib/env";
 
 export async function getBankingMetaData() {
-  const meta = await db.select().from(bankingMetaData).limit(1).get();
-  if (!meta) throw new Error("Ingen banking metadata fundet i DB");
-  return meta;
+  return bankingIntegrationMetadata;
 }
 
 export interface SimpleAccountReportEntry {
@@ -46,11 +44,7 @@ export interface SimpleAccountReportEntry {
 export function generateAuthHeader(
   accountId: string,
   requestId: string,
-  meta: {
-    serviceProvider: string;
-    servicerProviderId: string;
-    passcode: string;
-  }
+  meta: BankingIntegrationMetadata,
 ) {
   const now = new Date().toISOString().replace(/[-:.TZ]/g, "").slice(0, 14);
   const payload = `${accountId}#${requestId}#${meta.serviceProvider}#${now}`;

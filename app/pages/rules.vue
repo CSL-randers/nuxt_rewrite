@@ -1,16 +1,17 @@
 <script setup lang="ts">
 import type { TableColumn } from '@nuxt/ui'
 import { upperFirst } from 'scule'
-import type { Row } from '@tanstack/table-core'
+import type { Row, SortingFn, SortingState } from '@tanstack/table-core'
 import { getPaginationRowModel } from '@tanstack/table-core'
 import type { RuleListDto } from '~/lib/db/schema/index'
 import { ruleTypeEnum, ruleStatusEnum } from '~/lib/db/schema/index'
 import useFlattenArray from '~/composables/useFlattenArray'
 
 const UButton = resolveComponent('UButton')
-const UBadge = resolveComponent('UBadge')
 const UDropdownMenu = resolveComponent('UDropdownMenu')
+const UBadge = resolveComponent('UBadge')
 const UCheckbox = resolveComponent('UCheckbox')
+const UIcon = resolveComponent('UIcon')
 
 const classBadgeColumn = 'flex flex-wrap gap-1'
 const classMultiplePropsColumn = 'flex flex-col gap-1 text-sm'
@@ -20,6 +21,7 @@ const table = useTemplateRef('table')
 const modalOpen = ref(false)
 const editingRuleId = ref<number | null>(null)
 const globalFilterValue = ref('')
+const deletingRuleId = ref<number | null>(null)
 
 // API calls
 const { data: rules, status } = await useFetch<RuleListDto[]>('/api/rules', {
@@ -40,6 +42,79 @@ const rows = computed<RuleListDto[]>(() => {
   }))
 })
 
+const compareStrings = (a?: string | null, b?: string | null) =>
+  (a ?? '').localeCompare(b ?? '', 'da', { sensitivity: 'base', numeric: true })
+
+const normalizeArrayValue = (value?: string[] | null) => (value ?? []).join(' ').trim()
+
+const stringArraySortingFn: SortingFn<RuleListDto> = (rowA, rowB, columnId) => {
+  const valueA = rowA.getValue<string[] | undefined>(columnId)
+  const valueB = rowB.getValue<string[] | undefined>(columnId)
+  return compareStrings(normalizeArrayValue(valueA), normalizeArrayValue(valueB))
+}
+
+function getHeader(column: Column<RuleListDto>, label: string) {
+  const isSorted = column.getIsSorted()
+
+  return h(
+    UDropdownMenu,
+    {
+      content: {
+        align: 'start'
+      },
+      'aria-label': 'Actions dropdown',
+      items: [
+        {
+          label: 'Sortér stigende',
+          type: 'checkbox',
+          icon: 'i-lucide-arrow-up-narrow-wide',
+          checked: isSorted === 'asc',
+          onSelect: () => {
+            if (isSorted === 'asc') {
+              column.clearSorting()
+            } else {
+              column.toggleSorting(false)
+            }
+          }
+        },
+        {
+          label: 'Sortér faldende',
+          icon: 'i-lucide-arrow-down-wide-narrow',
+          type: 'checkbox',
+          checked: isSorted === 'desc',
+          onSelect: () => {
+            if (isSorted === 'desc') {
+              column.clearSorting()
+            } else {
+              column.toggleSorting(true)
+            }
+          }
+        }
+      ]
+    },
+    () =>
+      h(UButton, {
+        color: 'neutral',
+        variant: 'ghost',
+        label,
+        icon: isSorted
+          ? isSorted === 'asc'
+            ? 'i-lucide-arrow-up-narrow-wide'
+            : 'i-lucide-arrow-down-wide-narrow'
+          : 'i-lucide-arrow-up-down',
+        class: '-mx-2.5 data-[state=open]:bg-elevated',
+        'aria-label': `Sortér efter ${isSorted === 'asc' ? 'faldende' : 'stigende'}`
+      })
+  )
+}
+
+const sorting = ref([
+  {
+    id: 'id',
+    desc: false
+  }
+])
+
 // Dropdown-menu for actions
 function getRowItems(row: Row<RuleListDto>) {
   return [
@@ -54,12 +129,8 @@ function getRowItems(row: Row<RuleListDto>) {
       label: 'Slet regel',
       icon: 'solar:trash-bin-trash-bold-duotone',
       color: 'error',
-      onSelect() {
-        toast.add({
-          title: 'Regel slettet',
-          description: 'Reglen er blevet slettet og kan evt. genoprettes under indstillinger.'
-        })
-      }
+      disabled: deletingRuleId.value === row.original.id,
+      onSelect() { handleDeleteRule(row) }
     }
   ]
 }
@@ -78,6 +149,7 @@ const columns: TableColumn<RuleListDto>[] = [
   { // Selekteringskolonne
     id: 'Vælg',
     enableHiding: false,
+    enableSorting: false,
     header: ({ table }) =>
       h(UCheckbox, {
         'modelValue': table.getIsSomePageRowsSelected()
@@ -96,11 +168,13 @@ const columns: TableColumn<RuleListDto>[] = [
   },
   { // RuleID
     accessorKey: 'id',
-    header: 'ID',
+    header: ({ column }) => getHeader(column, 'ID'),
+    enableSorting: true
   },
   { // Ruletags (badges)
-    accessorKey: 'tags',
-    header: 'Tags',
+    accessorKey: 'ruleTags',
+    header: ({ column }) => getHeader(column, 'Tags'),
+    sortingFn: stringArraySortingFn,
     cell: ({ row }) => {
         return h(
             'div',
@@ -114,20 +188,25 @@ const columns: TableColumn<RuleListDto>[] = [
   { // Type (hidden, kun til filtrering)
     accessorKey: 'type',
     enableHiding: false,
+    header: ({ column }) => getHeader(column, 'Type'),
     cell: ({ row }) => row.original.type
   },
   { // Status (hidden, kun til filtrering)
     accessorKey: 'status',
     enableHiding: false,
+    header: ({ column }) => getHeader(column, 'Status'),
     cell: ({ row }) => row.original.status
   },
   { // Konto (hidden, kun til filtrering)
     accessorKey: 'relatedBankAccounts',
     enableHiding: false,
+    header: ({ column }) => getHeader(column, 'Konti'),
+    sortingFn: stringArraySortingFn,
     cell: ({ row }) => row.original.relatedBankAccounts.join(', ')
   },
   { // Stamdata
     id: 'Stamdata',
+    header: 'Stamdata',
     cell: ({ row }) => {
       const statusColor = { aktiv: 'text-green-600', inaktiv: 'text-red-600' }[row.original.status]
       const typeLabel = typeLabelMap[row.original.type]
@@ -149,8 +228,10 @@ const columns: TableColumn<RuleListDto>[] = [
     }
   },
   { // Matching references
-    accessorKey: 'matching.references',
-    header: 'Fritekst',
+    id: 'matching.references',
+    header: ({ column }) => getHeader(column, 'Fritekst'),
+    accessorFn: row => row.matching.references,
+    sortingFn: stringArraySortingFn,
     cell: ({ row }) =>
       h('div', { class: classBadgeColumn },
         row.original.matching.references.map(text =>
@@ -159,8 +240,10 @@ const columns: TableColumn<RuleListDto>[] = [
       )
   },
   { // Matching counterparties
-    accessorKey: 'matching.counterparties',
-    header: 'Part',
+    id: 'matching.counterparties',
+    header: ({ column }) => getHeader(column, 'Part'),
+    accessorFn: row => row.matching.counterparties,
+    sortingFn: stringArraySortingFn,
     cell: ({ row }) =>
       h('div', { class: classBadgeColumn },
         row.original.matching.counterparties.map(text =>
@@ -169,8 +252,10 @@ const columns: TableColumn<RuleListDto>[] = [
       )
   },
   { // Matching classification
-    accessorKey: 'matching.classification',
-    header: 'Transaktionstype',
+    id: 'matching.classification',
+    header: ({ column }) => getHeader(column, 'Transaktionstype'),
+    accessorFn: row => row.matching.classification,
+    sortingFn: stringArraySortingFn,
     cell: ({ row }) =>
       h('div', { class: classBadgeColumn },
         row.original.matching.classification.map(text =>
@@ -180,6 +265,7 @@ const columns: TableColumn<RuleListDto>[] = [
   },
   { // Datoer
     id: 'Datoer',
+    header: 'Datoer',
     cell: ({ row }) => {
       const formatDate = (date: Date | undefined | null) => {
         if (!date) return 'N/A'
@@ -210,29 +296,34 @@ const columns: TableColumn<RuleListDto>[] = [
     id: 'references_flat',
     accessorFn: row => row.matching.references.join(' '),
     enableHiding: false,
+    enableSorting: false,
     cell: () => undefined
   },
   { // Hidden matching columns to make them searchable
     id: 'counterparties_flat',
     accessorFn: row => row.matching.counterparties.join(' '),
     enableHiding: false,
+    enableSorting: false,
     cell: () => undefined
   },
   {
     id: 'classification_flat',
     accessorFn: row => row.matching.classification.join(' '),
     enableHiding: false,
+    enableSorting: false,
     cell: () => undefined
   },
   {
     id: 'ruleTags_flat',
     accessorFn: row => row.ruleTags?.join(' ') ?? '',
     enableHiding: false,
+    enableSorting: false,
     cell: () => undefined
   },
   { // Handlinger
     id: 'actions',
     enableHiding: false,
+    enableSorting: false,
     cell: ({ row }) => {
       return h(
         'div',
@@ -316,6 +407,34 @@ function handleEditRule(row: Row<RuleListDto>) {
 function handleSaved() {
   refreshNuxtData('rules')
   modalOpen.value = false
+}
+
+async function handleDeleteRule(row: Row<RuleListDto>) {
+  const ruleId = row.original.id
+  deletingRuleId.value = ruleId
+
+  try {
+    await $fetch(`/api/rule/${ruleId}`, {
+      method: 'DELETE'
+    })
+
+    toast.add({
+      title: 'Regel slettet',
+      description: `Regel #${ruleId} er blevet fjernet.`
+    })
+
+    rules.value = (rules.value ?? []).filter(rule => rule.id !== ruleId)
+    await refreshNuxtData('rules')
+  } catch (error) {
+    console.error('Fejl ved sletning af regel', error)
+    toast.add({
+      title: 'Fejl ved sletning',
+      description: 'Kunne ikke slette reglen. Prøv igen senere.',
+      color: 'error'
+    })
+  } finally {
+    deletingRuleId.value = null
+  }
 }
 </script>
 
@@ -408,6 +527,7 @@ function handleSaved() {
         v-model:global-filter="globalFilterValue"
         v-model:column-visibility="columnVisibility"
         v-model:pagination="pagination"
+        v-model:sorting="sorting"
         :pagination-options="{
           getPaginationRowModel: getPaginationRowModel()
         }"

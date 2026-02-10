@@ -37,28 +37,6 @@ export default defineEventHandler(async (event) => {
       lastUsed: true,
       createdAt: true,
       updatedAt: true,
-
-      matchText: true,
-      matchPrimaryReference: true,
-      matchId: true,
-      matchBatch: true,
-      matchEndToEndId: true,
-      matchOcrReference: true,
-      matchDebtorsPaymentId: true,
-      matchDebtorText: true,
-      matchDebtorMessage: true,
-      matchCreditorText: true,
-      matchCreditorMessage: true,
-
-      matchDebtorId: true,
-      matchDebtorName: true,
-      matchCreditorId: true,
-      matchCreditorName: true,
-
-      matchType: true,
-      matchTxDomain: true,
-      matchTxFamily: true,
-      matchTxSubFamily: true
     },
     with: {
       bankAccounts: {
@@ -70,7 +48,8 @@ export default defineEventHandler(async (event) => {
         columns: {
           ruleTagId: true
         }
-      }
+      },
+      conditions: true,
     },
     orderBy: (rule, { desc }) => [desc(rule.updatedAt)]
   })

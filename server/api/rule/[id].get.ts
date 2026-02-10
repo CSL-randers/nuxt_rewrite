@@ -1,6 +1,6 @@
 import { defineEventHandler, createError } from 'h3'
 import { eq } from 'drizzle-orm'
-import { mapDbArraysToMatches, ruleDraftSchema, rule } from '~/lib/db/schema'
+import { mapConditionsToMatches, ruleDraftSchema, rule } from '~/lib/db/schema'
 import db from '~/lib/db'
 
 function normalizeDbRow(row: any) {
@@ -22,7 +22,7 @@ export default defineEventHandler(async (event) => {
     // --------------------------
     // Hent regel fra DB
     // --------------------------
-    const dbRule = await db.query.Rule.findFirst({
+    const dbRule = await db.query.rule.findFirst({
       where: (fields, { eq }) => eq(fields.id, Number(id)),
       with: {
         bankAccounts: {
@@ -33,6 +33,12 @@ export default defineEventHandler(async (event) => {
         tags: {
           columns: {
             ruleTagId: true
+          }
+        },
+        conditions: true,
+        accountingParameters: {
+          with: {
+            attachments: true
           }
         }
       }
@@ -62,20 +68,38 @@ export default defineEventHandler(async (event) => {
     // --------------------------
     // Byg draft objekt
     // --------------------------
-    const normalizedRule = normalizeDbRow(dbRule)
+    const { accountingParameters, conditions, ...rest } = dbRule
+    const normalizedRule = normalizeDbRow(rest)
     const relatedBankAccounts = dbRule.bankAccounts?.map(acc => acc.bankAccountId).filter(Boolean) ?? []
     const ruleTags = dbRule.tags?.map(tag => tag.ruleTagId).filter(Boolean) ?? []
 
     delete (normalizedRule as any).bankAccounts
     delete (normalizedRule as any).tags
+    delete (normalizedRule as any).conditions
+    delete (normalizedRule as any).accountingParameters
 
-    const matches = mapDbArraysToMatches(normalizedRule)
+    const matches = mapConditionsToMatches(conditions ?? [])
+    const attachments = accountingParameters?.attachments ?? []
+    const attachmentNames = attachments.map(att => att.name)
+    const attachmentExtensions = attachments.map(att => att.fileExtension)
+    const attachmentData = attachments.map(att => att.data)
     const draft = ruleDraftSchema.parse({
       ...normalizedRule,
       relatedBankAccounts,
       ruleTags,
       matches,
-      lockedAt: isLocked ? dbRule.lockedAt : null
+      accountingPrimaryAccount: accountingParameters?.primaryAccount ?? '',
+      accountingSecondaryAccount: accountingParameters?.secondaryAccount ?? undefined,
+      accountingTertiaryAccount: accountingParameters?.tertiaryAccount ?? undefined,
+      accountingText: accountingParameters?.bookingText ?? undefined,
+      accountingCprType: accountingParameters?.cprType ?? 'ingen',
+      accountingCprNumber: accountingParameters?.cprNumber ?? undefined,
+      accountingNotifyTo: accountingParameters?.notifyTo ?? undefined,
+      accountingNote: accountingParameters?.note ?? undefined,
+      accountingAttachmentName: attachmentNames.length ? attachmentNames : undefined,
+      accountingAttachmentFileExtension: attachmentExtensions.length ? attachmentExtensions : undefined,
+      accountingAttachmentData: attachmentData.length ? attachmentData : undefined,
+      lockedAt: isLocked ? dbRule.lockedAt : undefined
     })
 
     // --------------------------

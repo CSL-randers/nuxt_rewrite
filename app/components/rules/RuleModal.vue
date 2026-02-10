@@ -12,12 +12,12 @@ import type {
   MatchCategory
 } from '~/lib/db/schema/index'
 import {
+  matchFieldOptionsByCategory,
   ruleTypeValues,
   ruleStatusValues,
   cprTypeValues,
   matchCategories,
   matchCategoryColumns,
-  mapMatchesToDbArrays,
   ruleBasicSchema,
   ruleMatchingSchema,
   ruleAccountingSchema
@@ -259,16 +259,7 @@ const cprTypeOptions = computed(() =>
   })) as { label: string; value: CprType }[]
 )
 
-const matchCategoryOptions = computed(() => {
-  const result: Record<MatchCategory, Array<{ label: string; value: MatchField }>> = {} as any
-  for (const [category, fields] of Object.entries(matchCategoryColumns)) {
-    result[category as MatchCategory] = (fields as MatchField[]).map(field => ({
-      label: field,
-      value: field
-    }))
-  }
-  return result
-})
+const matchCategoryOptions = matchFieldOptionsByCategory
 
 // ---------------
 // Step validation
@@ -292,7 +283,6 @@ async function onSubmit(event: FormSubmitEvent<typeof ruleSubmitSchema>) {
   const payload = {
     ...state,
     matches: matches.value,
-    ...mapMatchesToDbArrays(matches.value)
   }
 
   const result = ruleSubmitSchema.safeParse(payload)

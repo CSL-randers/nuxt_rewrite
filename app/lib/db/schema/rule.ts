@@ -1,212 +1,143 @@
 import { z } from "zod"
 import { pgTable, text, date, numeric, integer, uuid, primaryKey, bigint } from "drizzle-orm/pg-core"
 import { createUpdateSchema, createSelectSchema } from "drizzle-zod"
-import type { RuleType, RuleStatus, CprType } from "./enums"
-import { ruleTypeEnum, ruleStatusEnum, cprTypeEnum, ruleTypeValues, ruleStatusValues, cprTypeValues } from "./enums"
+import type { RuleType, RuleStatus, RuleConditionOperator } from "./enums"
+import {
+  ruleTypeEnum,
+  ruleStatusEnum,
+  cprTypeEnum,
+  ruleTypeValues,
+  ruleStatusValues,
+  cprTypeValues,
+  ruleConditionFieldEnum,
+  ruleConditionOperatorEnum,
+  ruleConditionOperatorValues
+} from "./enums"
 import { account } from "./account"
-import { RuleTag } from "./ruleTag"
+import { ruleTag } from "./ruleTag"
+import {
+  fieldToCategory,
+  matchCategoryColumns,
+  matchCategoryEnumValues,
+  matchFieldEnumValues,
+} from "~/lib/rules/match-config"
+import type { MatchCategory, MatchField } from "~/lib/rules/match-config"
 
-
-type RuleColumnKey =
-  | 'matchText'
-  | 'matchPrimaryReference'
-  | 'matchId'
-  | 'matchBatch'
-  | 'matchEndToEndId'
-  | 'matchOcrReference'
-  | 'matchDebtorsPaymentId'
-  | 'matchDebtorText'
-  | 'matchDebtorMessage'
-  | 'matchCreditorText'
-  | 'matchCreditorMessage'
-  | 'matchDebtorId'
-  | 'matchDebtorName'
-  | 'matchCreditorId'
-  | 'matchCreditorName'
-  | 'matchType'
-  | 'matchTxDomain'
-  | 'matchTxFamily'
-  | 'matchTxSubFamily'
-
-// ---------------------------
-// 1. Main tables
-// ---------------------------
 export const rule = pgTable('rule', {
   id: integer().primaryKey().generatedAlwaysAsIdentity(),
-
-  // Metadata
-  lastUsed: date({ mode: "date" }),
-  createdAt: date({ mode: "date" }).defaultNow(),
-  updatedAt: date({ mode: "date" }).$onUpdate(() => new Date()),
-  lockedAt: date({ mode: "date" }),
-  lockedBy: text(),
-  currentVersionId: bigint({ mode: 'number' }).notNull(),
-
-  type: ruleTypeEnum(),
-  status: ruleStatusEnum(),
-
-  // 🔍 Matching – references
-  matchText: text().array(),
-  matchPrimaryReference: text().array(),
-  matchId: text().array(),
-  matchBatch: text().array(),
-  matchEndToEndId: text().array(),
-  matchOcrReference: text().array(),
-  matchDebtorsPaymentId: text().array(),
-  matchDebtorText: text().array(),
-  matchDebtorMessage: text().array(),
-  matchCreditorText: text().array(),
-  matchCreditorMessage: text().array(),
-
-  // 🔍 Matching – counterparties
-  matchDebtorId: text().array(),
-  matchDebtorName: text().array(),
-  matchCreditorId: text().array(),
-  matchCreditorName: text().array(),
-
-  // 🔍 Matching – classification
-  matchType: text().array(),
-  matchTxDomain: text().array(),
-  matchTxFamily: text().array(),
-  matchTxSubFamily: text().array(),
-
-  // 🔍 Matching – amount
-  matchAmountMin: numeric(),
-  matchAmountMax: numeric(),
-
-  // 🧾 Accounting
-  accountingPrimaryAccount: text().notNull(),
-  accountingSecondaryAccount: text(),
-  accountingTertiaryAccount: text(),
-  accountingText: text(),
-  accountingCprType: cprTypeEnum(),
-  accountingCprNumber: text(),
-  accountingNotifyTo: text(),
-  accountingNote: text(),
-
-  // 📎 Attachments
-  accountingAttachmentName: text().array(),
-  accountingAttachmentFileExtension: text().array(),
-  accountingAttachmentData: text().array(),
+  lastUsed: date('last_used', { mode: "date" }),
+  createdAt: date('created_at', { mode: "date" }).defaultNow(),
+  updatedAt: date('updated_at', { mode: "date" }).defaultNow().$onUpdate(() => new Date()),
+  lockedAt: date('locked_at', { mode: "date" }),
+  lockedBy: text('locked_by'),
+  currentVersionId: bigint('current_version_id', { mode: 'number' }).notNull(),
+  type: ruleTypeEnum('rule_type'),
+  status: ruleStatusEnum('rule_status'),
+  matchAmountMin: numeric('amount_min'),
+  matchAmountMax: numeric('amount_max'),
 })
 
 export const ruleBankAccount = pgTable('rule_bank_account', {
-  ruleId: integer().notNull().references(() => rule.id, { onDelete: 'cascade' }),
-  bankAccountId: text().notNull().references(() => account.id, { onDelete: 'cascade' }),
+  ruleId: integer('rule_id').notNull().references(() => rule.id, { onDelete: 'cascade' }),
+  bankAccountId: text('bank_account_id').notNull().references(() => account.id, { onDelete: 'cascade' })
 }, (table) => ([
   primaryKey({ columns: [table.ruleId, table.bankAccountId] })
 ]))
 
 export const ruleRuleTag = pgTable('rule_rule_tag', {
-  ruleId: integer().notNull().references(() => rule.id, { onDelete: 'cascade' }),
-  ruleTagId: text().notNull().references(() => RuleTag.id, { onDelete: 'cascade' }),
+  ruleId: integer('rule_id').notNull().references(() => rule.id, { onDelete: 'cascade' }),
+  ruleTagId: text('rule_tag_id').notNull().references(() => ruleTag.id, { onDelete: 'cascade' }),
 }, (table) => ([
   primaryKey({ columns: [table.ruleId, table.ruleTagId] })
 ]))
 
-// ---------------------------
-// 2. Typedefs and matchEntry
-// ---------------------------
+export const ruleBankingCondition = pgTable('rule_banking_condition', {
+  id: uuid().defaultRandom().primaryKey(),
+  ruleId: integer('rule_id').notNull().references(() => rule.id, { onDelete: 'cascade' }),
+  field: ruleConditionFieldEnum('field').notNull(),
+  operator: ruleConditionOperatorEnum('operator').notNull().default('eq'),
+  value: text('value').notNull(),
+})
 
-export const matchCategoryColumns = {
-  Fritekst: [
-    'matchText',
-    'matchPrimaryReference',
-    'matchId',
-    'matchBatch',
-    'matchEndToEndId',
-    'matchOcrReference',
-    'matchDebtorsPaymentId',
-    'matchDebtorText',
-    'matchDebtorMessage',
-    'matchCreditorText',
-    'matchCreditorMessage'
-  ],
-  Part: [
-    'matchDebtorId',
-    'matchDebtorName',
-    'matchCreditorId',
-    'matchCreditorName'
-  ],
-  Transaktionstype: [
-    'matchType',
-    'matchTxDomain',
-    'matchTxFamily',
-    'matchTxSubFamily'
-  ],
-} satisfies Record<string, RuleColumnKey[]>
+export const kmdAccountingParameters = pgTable('kmd_accounting_parameters', {
+  id: uuid().defaultRandom().primaryKey(),
+  ruleId: integer('rule_id').references(() => rule.id, { onDelete: 'cascade' }),
+  primaryAccount: text('primary_account').notNull(),
+  secondaryAccount: text('secondary_account'),
+  tertiaryAccount: text('tertiary_account'),
+  bookingText: text('booking_text'),
+  cprType: cprTypeEnum('cpr_type'),
+  cprNumber: text('cpr_number'),
+  notifyTo: text('notify_to'),
+  note: text('note'),
+})
 
-export type MatchCategory = keyof typeof matchCategoryColumns
-
-export const matchCategories = Object.keys(matchCategoryColumns) as MatchCategory[]
-
-export type MatchField = typeof matchCategoryColumns[keyof typeof matchCategoryColumns][number]
+export const kmdAttachment = pgTable('kmd_attachment', {
+  id: uuid().defaultRandom().primaryKey(),
+  parameterId: uuid('parameter_id').notNull().references(() => kmdAccountingParameters.id, { onDelete: 'cascade' }),
+  name: text('name').notNull(),
+  fileExtension: text('file_extension').notNull(),
+  data: text('data').notNull(),
+})
 
 export const matchEntrySchema = z.object({
-  category: z.enum(matchCategories),
+  category: z.enum(matchCategoryEnumValues),
   value: z.string().min(1, "Value kan ikke være tom"),
-  fields: z.array(z.custom<MatchField>()).optional(),
+  fields: z.array(z.enum(matchFieldEnumValues)).optional(),
+  operator: z.enum(ruleConditionOperatorValues).default('eq').optional(),
   gate: z.enum(['OG', 'ELLER']).default('ELLER')
 })
 
 export type MatchGate = 'OG' | 'ELLER'
 export type MatchEntry = z.infer<typeof matchEntrySchema>
+export type RuleConditionRow = typeof ruleBankingCondition.$inferSelect
+export type RuleConditionInsert = Omit<typeof ruleBankingCondition.$inferInsert, 'id' | 'ruleId'>
+export type KmdAccountingParametersRow = typeof kmdAccountingParameters.$inferSelect
+export type KmdAttachmentRow = typeof kmdAttachment.$inferSelect
 
+export function mapMatchesToConditionRows(matches: MatchEntry[]): RuleConditionInsert[] {
+  return matches.flatMap((entry) => {
+    const operator: RuleConditionOperator = entry.operator ?? 'eq'
+    const fields = entry.fields?.length ? entry.fields : matchCategoryColumns[entry.category]
 
-// ---------------------------
-// 3. Helpers
-// ---------------------------
-export function mapMatchesToDbArrays(matches: MatchEntry[]) {
-  const dbObj: Partial<Record<keyof typeof rule, string[]>> = {}
-
-  matches.forEach(entry => {
-    const fields =
-      entry.fields?.length
-        ? entry.fields
-        : matchCategoryColumns[entry.category]
-
-    fields.forEach(field => {
-      if (!dbObj[field]) dbObj[field] = []
-      dbObj[field]!.push(entry.value)
-    })
+    return fields.map((field) => ({
+      field,
+      operator,
+      value: entry.value
+    }))
   })
-
-  return dbObj
 }
 
-export function mapDbArraysToMatches(
-  rule: Partial<Record<RuleColumnKey, string[] | null | undefined>>
-): MatchEntry[] {
-  const result: MatchEntry[] = []
+export function mapConditionsToMatches(conditions: RuleConditionRow[]): MatchEntry[] {
+  const byCategory = new Map<MatchCategory, Map<string, { fields: Set<MatchField>; operator: RuleConditionOperator; value: string }>>()
 
-  for (const category of matchCategories) {
-    const fields = matchCategoryColumns[category]
+  for (const condition of conditions) {
+    const category = fieldToCategory[condition.field]
+    if (!category) continue
 
-    // value -> set of fields where it appears
-    const valueFieldMap = new Map<string, Set<RuleColumnKey>>()
-
-    for (const field of fields) {
-      const values = rule[field] ?? []
-
-      for (const value of values) {
-        if (!valueFieldMap.has(value)) {
-          valueFieldMap.set(value, new Set())
-        }
-        valueFieldMap.get(value)!.add(field)
-      }
+    const key = `${condition.operator}:${condition.value}`
+    if (!byCategory.has(category)) {
+      byCategory.set(category, new Map())
     }
 
-    for (const [value, fieldSet] of valueFieldMap.entries()) {
-      const usedFields = [...fieldSet]
+    const categoryMap = byCategory.get(category)!
+    if (!categoryMap.has(key)) {
+      categoryMap.set(key, { fields: new Set(), operator: condition.operator, value: condition.value })
+    }
 
+    categoryMap.get(key)!.fields.add(condition.field)
+  }
+
+  const result: MatchEntry[] = []
+  for (const [category, grouped] of byCategory.entries()) {
+    for (const meta of grouped.values()) {
+      const fields = Array.from(meta.fields)
       result.push({
         category,
-        value,
-        fields:
-          usedFields.length === fields.length
-            ? undefined
-            : usedFields,
-        gate: 'ELLER' // evt. senere fra DB
+        value: meta.value,
+        fields: fields.length === matchCategoryColumns[category].length ? undefined : (fields as MatchField[]),
+        operator: meta.operator,
+        gate: 'ELLER'
       })
     }
   }
@@ -214,9 +145,6 @@ export function mapDbArraysToMatches(
   return result
 }
 
-// -----------------------------------
-// 4. Insert / Update / Select schemas
-// -----------------------------------
 export const ruleDraftSchema = z.object({
   type: z.enum(ruleTypeValues),
   status: z.enum(ruleStatusValues),
@@ -284,21 +212,17 @@ export const ruleUpdateSchema = createUpdateSchema(rule).omit({
 })
 
 export const ruleMatchingSelectSchema = createSelectSchema(rule).pick({
-  accountingPrimaryAccount: true,
-  accountingSecondaryAccount: true,
-  accountingTertiaryAccount: true,
-  accountingText: true,
-  accountingCprType: true,
-  accountingCprNumber: true
+  matchAmountMin: true,
+  matchAmountMax: true,
 })
 
-// ---------------
-// 5. Type exports
-// ---------------
 export type RuleDraftSchema = z.infer<typeof ruleDraftSchema>
 export type RuleUpdateSchema = z.infer<typeof ruleUpdateSchema>
-export type RuleSelectSchema = z.infer<typeof ruleUpdateSchema>
+export type RuleSelectSchema = z.infer<typeof ruleSelectSchema>
 export type RuleMatchingSelectSchema = z.infer<typeof ruleMatchingSelectSchema>
+
+export { matchCategories, matchCategoryColumns, matchFieldOptionsByCategory } from "~/lib/rules/match-config"
+export type { MatchCategory, MatchField } from "~/lib/rules/match-config"
 
 export type Rule = {
   id: number
@@ -306,38 +230,11 @@ export type Rule = {
   status: RuleStatus
   relatedBankAccounts: string[]
   ruleTags?: string[]
-  matchText?: string[]
-  matchPrimaryReference?: string[]
-  matchId?: string[]
-  matchBatch?: string[]
-  matchEndToEndId?: string[]
-  matchOcrReference?: string[]
-  matchDebtorsPaymentId?: string[]
-  matchDebtorText?: string[]
-  matchDebtorMessage?: string[]
-  matchCreditorText?: string[]
-  matchCreditorMessage?: string[]
-  matchDebtorId?: string[]
-  matchDebtorName?: string[]
-  matchCreditorId?: string[]
-  matchCreditorName?: string[]
-  matchType?: string[]
-  matchTxDomain?: string[]
-  matchTxFamily?: string[]
-  matchTxSubFamily?: string[]
   matchAmountMin?: number
   matchAmountMax?: number
-  accountingPrimaryAccount: string
-  accountingSecondaryAccount?: string
-  accountingTertiaryAccount?: string
-  accountingText?: string
-  accountingCprType: CprType
-  accountingCprNumber?: string
-  accountingNotifyTo?: string
-  accountingNote?: string
-  accountingAttachmentName?: string[]
-  accountingAttachmentFileExtension?: string[]
-  accountingAttachmentData?: string[]
+  lockedAt?: Date
+  lockedBy?: string
+  currentVersionId: number
   lastUsed?: Date
   createdAt: Date
   updatedAt: Date
@@ -347,28 +244,20 @@ export const ruleListDto = z.object({
   id: z.number(),
   type: z.enum(ruleTypeValues),
   status: z.enum(ruleStatusValues),
-
   relatedBankAccounts: z.array(z.string()),
-
   lastUsed: z.date().nullable(),
   createdAt: z.date(),
   updatedAt: z.date(),
-
   matching: z.object({
     references: z.array(z.string()),
     counterparties: z.array(z.string()),
     classification: z.array(z.string())
   }),
-
   ruleTags: z.array(z.string()).optional()
 })
 
 export const ruleListDtoArray = z.array(ruleListDto)
 export type RuleListDto = z.infer<typeof ruleListDto>
-
-function mergeArrays(...arrays: (string[] | null | undefined)[]) {
-  return arrays.flatMap(a => a ?? []).filter(Boolean)
-}
 
 function extractRelatedBankAccountIds(row: any): string[] {
   if (Array.isArray(row.relatedBankAccounts)) {
@@ -405,13 +294,33 @@ function extractRuleTagIds(row: any): string[] {
   return []
 }
 
-// ------
-// 6. DTO
-// ------
+function summarizeConditions(conditions: RuleConditionRow[]): RuleListDto['matching'] {
+  const summary = {
+    references: new Set<string>(),
+    counterparties: new Set<string>(),
+    classification: new Set<string>(),
+  }
+
+  for (const condition of conditions) {
+    const category = fieldToCategory[condition.field]
+    if (!category) continue
+
+    if (category === 'Fritekst') summary.references.add(condition.value)
+    else if (category === 'Part') summary.counterparties.add(condition.value)
+    else summary.classification.add(condition.value)
+  }
+
+  return {
+    references: Array.from(summary.references),
+    counterparties: Array.from(summary.counterparties),
+    classification: Array.from(summary.classification),
+  }
+}
 
 export function mapRuleToListDto(r: any): RuleListDto {
   const relatedBankAccounts = extractRelatedBankAccountIds(r)
   const ruleTags = extractRuleTagIds(r)
+  const conditions: RuleConditionRow[] = Array.isArray(r.conditions) ? r.conditions : []
 
   return {
     id: r.id,
@@ -421,37 +330,7 @@ export function mapRuleToListDto(r: any): RuleListDto {
     lastUsed: r.lastUsed,
     createdAt: r.createdAt,
     updatedAt: r.updatedAt,
-
-    matching: {
-      references: mergeArrays(
-        r.matchText,
-        r.matchPrimaryReference,
-        r.matchId,
-        r.matchBatch,
-        r.matchEndToEndId,
-        r.matchOcrReference,
-        r.matchDebtorsPaymentId,
-        r.matchDebtorText,
-        r.matchDebtorMessage,
-        r.matchCreditorText,
-        r.matchCreditorMessage
-      ),
-
-      counterparties: mergeArrays(
-        r.matchDebtorId,
-        r.matchDebtorName,
-        r.matchCreditorId,
-        r.matchCreditorName
-      ),
-
-      classification: mergeArrays(
-        r.matchType,
-        r.matchTxDomain,
-        r.matchTxFamily,
-        r.matchTxSubFamily
-      )
-    },
-
+    matching: summarizeConditions(conditions),
     ruleTags: ruleTags.length ? ruleTags : undefined
   }
 }

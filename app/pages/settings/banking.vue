@@ -1,22 +1,91 @@
 <script setup lang="ts">
 import type { TableColumn } from '@nuxt/ui'
-import type { Row } from '@tanstack/table-core'
+import type { Row, SortingState } from '@tanstack/table-core'
 import { getPaginationRowModel } from '@tanstack/table-core'
 import type { AccountSelectSchema } from '~/lib/db/schema'
+
+interface BankingMetadataResponse {
+  serviceProvider: string
+  servicerProviderId: string
+  passcode: string
+}
+
+const BANK_ACCOUNTS_QUERY_KEY = 'bank-accounts' as const
 
 const toast = useToast()
 const table = useTemplateRef('table')
 const globalFilterValue = ref('')
+const UButton = resolveComponent('UButton')
+const UDropdownMenu = resolveComponent('UDropdownMenu')
+const UIcon = resolveComponent('UIcon')
 
 const modalOpen = ref(false)
 const editingAccountId = ref<string | null>(null)
+const deletingAccountId = ref<string | null>(null)
+const refreshingAccounts = ref(false)
+const sorting = ref<SortingState>([])
 
-const { data: accounts, pending, refresh: refreshAccounts } = await useAsyncData<AccountSelectSchema[]>(
-  'bank-accounts',
-  async () => $fetch('/api/bank-accounts')
+const { data: accounts, pending, refresh: refreshBankAccounts } = await useFetch<AccountSelectSchema[]>(
+  '/api/bank-accounts',
+  {
+    key: BANK_ACCOUNTS_QUERY_KEY,
+    default: () => []
+  }
 )
 
+const { data: bankingMetadata } = await useFetch<BankingMetadataResponse>(
+  '/api/settings/banking-metadata',
+  {
+    key: 'banking-metadata',
+    default: () => ({
+      serviceProvider: '',
+      servicerProviderId: '',
+      passcode: ''
+    })
+  }
+)
+
+const bankingMetadataFields = computed(() => [
+  { label: 'Service Provider', value: bankingMetadata.value?.serviceProvider ?? '—' },
+  { label: 'Servicer Provider ID', value: bankingMetadata.value?.servicerProviderId ?? '—' },
+  { label: 'Passcode', value: bankingMetadata.value?.passcode ?? '—' }
+])
+
+const refreshAccounts = async () => {
+  refreshingAccounts.value = true
+  try {
+    await refreshBankAccounts()
+  } finally {
+    refreshingAccounts.value = false
+  }
+}
+
 const rows = computed(() => [...(accounts.value ?? [])])
+
+const createSortableHeader = (label: string) => ({ column }: { column: any }) => {
+  const sortingState = column.getIsSorted?.()
+  const iconName = sortingState === 'asc'
+    ? 'i-lucide-arrow-up'
+    : sortingState === 'desc'
+      ? 'i-lucide-arrow-down'
+      : 'i-lucide-arrow-up-down'
+
+  return h(
+    'button',
+    {
+      type: 'button',
+      class: 'inline-flex items-center gap-1 font-semibold text-left text-sm',
+      onClick: column.getToggleSortingHandler?.()
+    },
+    [
+      h('span', label),
+      h(UIcon, {
+        name: iconName,
+        class: 'size-3.5 text-muted'
+      })
+    ]
+  )
+}
 
 // Dropdown-menu for actions
 function getRowItems(row: Row<AccountSelectSchema>) {
@@ -32,12 +101,8 @@ function getRowItems(row: Row<AccountSelectSchema>) {
       label: 'Slet bankkonto',
       icon: 'solar:trash-bin-trash-bold-duotone',
       color: 'error',
-      onSelect() {
-        toast.add({
-          title: 'Bankkonto slettet',
-          description: 'Reglen er blevet slettet og kan evt. genoprettes under indstillinger.'
-        })
-      }
+      disabled: deletingAccountId.value === row.original.id,
+      onSelect() { handleDeleteAccount(row) }
     }
   ]
 }
@@ -46,16 +111,19 @@ const columns: TableColumn<AccountSelectSchema>[] = [
   { // id
     accessorKey: 'id',
     id: 'id',
-    header: 'Bankkonto'
+    header: createSortableHeader('Bankkonto'),
+    enableSorting: true
   },
   { // statusAccount
     accessorKey: 'statusAccount',
     id: 'statusAccount',
-    header: 'Statuskonto'
+    header: createSortableHeader('Statuskonto'),
+    enableSorting: true
   },
   { // Handlinger
     id: 'actions',
     enableHiding: false,
+    enableSorting: false,
     cell: ({ row }) => {
       return h(
         'div',
@@ -98,6 +166,34 @@ async function handleSaved() {
   await refreshAccounts()
   modalOpen.value = false
 }
+
+async function handleDeleteAccount(row: Row<AccountSelectSchema>) {
+  const accountId = row.original.id
+  deletingAccountId.value = accountId
+
+  try {
+    await $fetch(`/api/bank-accounts/${accountId}`, {
+      method: 'DELETE'
+    })
+
+    toast.add({
+      title: 'Bankkonto slettet',
+      description: `${accountId} er blevet fjernet.`
+    })
+
+    accounts.value = (accounts.value ?? []).filter((account) => account.id !== accountId)
+    await refreshAccounts()
+  } catch (error) {
+    console.error('Fejl ved sletning af konto', error)
+    toast.add({
+      title: 'Fejl ved sletning',
+      description: 'Kunne ikke slette bankkontoen. Prøv igen senere.',
+      color: 'error'
+    })
+  } finally {
+    deletingAccountId.value = null
+  }
+}
 </script>
 
 <template>
@@ -120,6 +216,27 @@ async function handleSaved() {
     </template>
 
     <template #body>
+      <section class="mb-6 space-y-3">
+        <div>
+          <p class="text-xs font-semibold uppercase tracking-wide text-muted">Bank metadata</p>
+          <p class="text-sm text-muted">Værdierne kommer fra din .env fil og er kun til læsning.</p>
+        </div>
+        <div class="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
+          <div
+            v-for="field in bankingMetadataFields"
+            :key="field.label"
+            class="flex flex-col gap-1"
+          >
+            <span class="text-xs font-semibold text-muted">{{ field.label }}</span>
+            <UInput
+              :model-value="field.value"
+              readonly
+              class="font-mono text-sm"
+            />
+          </div>
+        </div>
+      </section>
+
       <div class="flex flex-wrap items-center justify-between gap-1.5">
         <UInput
           v-model="globalFilterValue"
@@ -133,13 +250,14 @@ async function handleSaved() {
         ref="table"
         v-model:global-filter="globalFilterValue"
         v-model:pagination="pagination"
+        v-model:sorting="sorting"
         :pagination-options="{
           getPaginationRowModel: getPaginationRowModel()
         }"
         class="shrink-0"
         :data="rows"
         :columns="columns"
-        :loading="pending"
+        :loading="pending || refreshingAccounts"
         :ui="{
           base: 'table-fixed border-separate border-spacing-0',
           thead: '[&>tr]:bg-elevated/50 [&>tr]:after:content-none',

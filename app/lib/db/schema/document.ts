@@ -1,20 +1,20 @@
 import { z } from "zod"
-import { pgTable, text, date, uuid } from "drizzle-orm/pg-core"
+import { pgTable, text, uuid } from "drizzle-orm/pg-core"
 import { createInsertSchema, createSelectSchema } from "drizzle-zod"
 import { documentTypeEnum } from "./enums"
+import { run } from "./run"
 
-// Table will only be populated with data during batch runs
-export const Document = pgTable('document', {
+export const document = pgTable('document', {
   id: uuid().defaultRandom().primaryKey(),
-  type: documentTypeEnum(),
-  bookingDate: date({ mode: "date" }).notNull(),
-  content: text().notNull(),
-  filename: text().notNull(),
-  fileExtension: text().notNull(),
+  runId: uuid('run_id').notNull().references(() => run.id),
+  type: documentTypeEnum('type'),
+  content: text('content').notNull(),
+  filename: text('filename').notNull(),
+  fileExtension: text('file_extension').notNull(),
 })
 
-export const documentInsertSchema = createInsertSchema(Document)
-export const documentSelectSchema = createSelectSchema(Document)
+export const documentInsertSchema = createInsertSchema(document)
+export const documentSelectSchema = createSelectSchema(document)
 
 export type DocumentInsertSchema = z.infer<typeof documentInsertSchema>
 export type DocumentSelectSchema = z.infer<typeof documentSelectSchema>

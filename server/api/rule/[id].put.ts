@@ -10,28 +10,83 @@ import {
   ruleVersion,
   ruleDraftSchema,
   RuleVersionInsertSchema,
-  mapMatchesToDbArrays
+  mapMatchesToConditionRows,
+  ruleBankingCondition,
+  kmdAccountingParameters,
+  kmdAttachment
 } from '~/lib/db/schema/index'
 
 function compileRuleDraftToDb(draft: RuleDraftSchema, newVersion: bigint) {
-  const matchColumns = mapMatchesToDbArrays(draft.matches ?? [])
-  const { matches, relatedBankAccounts, ruleTags, ...rest } = draft
+  const {
+    matches,
+    relatedBankAccounts,
+    ruleTags,
+    accountingPrimaryAccount,
+    accountingSecondaryAccount,
+    accountingTertiaryAccount,
+    accountingText,
+    accountingCprType,
+    accountingCprNumber,
+    accountingNotifyTo,
+    accountingNote,
+    accountingAttachmentName,
+    accountingAttachmentFileExtension,
+    accountingAttachmentData,
+    ...rest
+  } = draft
+
   const bankAccountIds = Array.from(new Set(relatedBankAccounts))
   const tagIds = Array.from(new Set(ruleTags ?? []))
+  const conditionRows = mapMatchesToConditionRows(matches ?? [])
   const ruleData = {
     ...rest,
-    ...matchColumns,
     currentVersionId: newVersion
+  }
+
+  const attachments: Array<{ name: string; fileExtension: string; data: string }> = []
+  const maxAttachments = Math.max(
+    accountingAttachmentName?.length ?? 0,
+    accountingAttachmentFileExtension?.length ?? 0,
+    accountingAttachmentData?.length ?? 0
+  )
+
+  for (let i = 0; i < maxAttachments; i++) {
+    const name = accountingAttachmentName?.[i]
+    const fileExtension = accountingAttachmentFileExtension?.[i]
+    const data = accountingAttachmentData?.[i]
+
+    if (name && fileExtension && data) {
+      attachments.push({ name, fileExtension, data })
+    }
+  }
+
+  const accountingParameters = {
+    primaryAccount: accountingPrimaryAccount,
+    secondaryAccount: accountingSecondaryAccount,
+    tertiaryAccount: accountingTertiaryAccount,
+    bookingText: accountingText,
+    cprType: accountingCprType,
+    cprNumber: accountingCprNumber,
+    notifyTo: accountingNotifyTo?.length ? accountingNotifyTo : null,
+    note: accountingNote,
   }
 
   return {
     ruleData,
     bankAccountIds,
     tagIds,
+    conditionRows,
+    accountingParameters,
+    attachments,
     versionContent: {
       ...ruleData,
       relatedBankAccounts: bankAccountIds,
-      ruleTags: tagIds
+      ruleTags: tagIds,
+      matches: matches ?? [],
+      accounting: {
+        ...accountingParameters,
+        attachments
+      }
     }
   }
 }
@@ -60,48 +115,73 @@ export default defineEventHandler(async (event) => {
     return { success: false, error: 'Reglen er låst af en anden bruger' }
   }
 
-  const newVersion = (existingRule.currentVersionId ?? 0n) + 1n
+  const newVersion = (existingRule.currentVersionId ?? 0) + 1
 
-  const { ruleData, bankAccountIds, tagIds, versionContent } = compileRuleDraftToDb(parsed.data, BigInt(newVersion))
+  const { ruleData, bankAccountIds, tagIds, conditionRows, accountingParameters, attachments, versionContent } = compileRuleDraftToDb(parsed.data, BigInt(newVersion))
   const validatedDbPayload = createInsertSchema(rule).parse(ruleData)
 
-  // -------------------
-  // Opdater rule
-  // -------------------
-  const [updatedRule] = await db.update(rule)
-    .set(validatedDbPayload)
-    .where((fields, { eq }) => eq(fields.id, id))
-    .returning()
+  await db.transaction(async (tx) => {
+    const [updatedRule] = await tx.update(rule)
+      .set(validatedDbPayload)
+      .where((fields, { eq }) => eq(fields.id, id))
+      .returning()
 
-  if (!updatedRule) throw createError({ statusCode: 500, statusMessage: 'Fejl ved opdatering af regel' })
+    if (!updatedRule) throw createError({ statusCode: 500, statusMessage: 'Fejl ved opdatering af regel' })
 
-  // -------------------
-  // Opdater relationstabeller
-  // -------------------
-  await db.delete(ruleBankAccount).where(eq(ruleBankAccount.ruleId, id))
-  if (bankAccountIds.length) {
-    await db.insert(ruleBankAccount).values(
-      bankAccountIds.map(bankAccountId => ({ ruleId: id, bankAccountId }))
-    )
-  }
+    await tx.delete(ruleBankAccount).where(eq(ruleBankAccount.ruleId, id))
+    if (bankAccountIds.length) {
+      await tx.insert(ruleBankAccount).values(
+        bankAccountIds.map(bankAccountId => ({ ruleId: id, bankAccountId }))
+      )
+    }
 
-  await db.delete(ruleRuleTag).where(eq(ruleRuleTag.ruleId, id))
-  if (tagIds.length) {
-    await db.insert(ruleRuleTag).values(
-      tagIds.map(ruleTagId => ({ ruleId: id, ruleTagId }))
-    )
-  }
+    await tx.delete(ruleRuleTag).where(eq(ruleRuleTag.ruleId, id))
+    if (tagIds.length) {
+      await tx.insert(ruleRuleTag).values(
+        tagIds.map(ruleTagId => ({ ruleId: id, ruleTagId }))
+      )
+    }
 
-  // -------------------
-  // Indsæt rule_version
-  // -------------------
-  const versionPayload: RuleVersionInsertSchema = {
-    ruleId: id,
-    version: Number(newVersion), // version-tabellen bruger Number
-    content: versionContent
-  }
+    await tx.delete(ruleBankingCondition).where(eq(ruleBankingCondition.ruleId, id))
+    if (conditionRows.length) {
+      await tx.insert(ruleBankingCondition).values(
+        conditionRows.map(condition => ({ ...condition, ruleId: id }))
+      )
+    }
 
-  await db.insert(ruleVersion).values(versionPayload)
+    const [existingParameters] = await tx.update(kmdAccountingParameters)
+      .set(accountingParameters)
+      .where(eq(kmdAccountingParameters.ruleId, id))
+      .returning()
+
+    let parameterId = existingParameters?.id
+    if (!parameterId) {
+      const [createdParameters] = await tx.insert(kmdAccountingParameters)
+        .values({ ...accountingParameters, ruleId: id })
+        .returning()
+      parameterId = createdParameters?.id ?? undefined
+    }
+
+    if (parameterId) {
+      await tx.delete(kmdAttachment).where(eq(kmdAttachment.parameterId, parameterId))
+      if (attachments.length) {
+        await tx.insert(kmdAttachment).values(
+          attachments.map(attachment => ({
+            ...attachment,
+            parameterId,
+          }))
+        )
+      }
+    }
+
+    const versionPayload: RuleVersionInsertSchema = {
+      ruleId: id,
+      version: Number(newVersion),
+      content: versionContent
+    }
+
+    await tx.insert(ruleVersion).values(versionPayload)
+  })
 
   const storage = useStorage('rules')
   await storage.removeItem('rule-list')

@@ -128,12 +128,7 @@ async function onSubmit(_event: FormSubmitEvent<FormState>) {
     </template>
 
     <template #body>
-      <UForm
-        :schema="formSchema"
-        :state="state"
-        @submit="onSubmit"
-      >
-        <!-- Form container (samme look & feel som ruleModal) -->
+      <UForm :schema="formSchema" :state="state" @submit="onSubmit">
         <div
           class="mt-4 p-4 bg-gray-50 dark:bg-gray-800 rounded-md border border-gray-200 dark:border-gray-700 space-y-4"
         >

@@ -1,3 +1,5 @@
+<!-- Den her fil konverterer filer til base64, som passer til KMD Postering Ind -->
+
 <script setup lang="ts">
 type AttachmentPayload = {
   names: string[]
