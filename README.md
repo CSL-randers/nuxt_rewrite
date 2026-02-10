@@ -1,75 +1,11 @@
-# Nuxt Minimal Starter
+## Icon Attribution
 
-Look at the [Nuxt documentation](https://nuxt.com/docs/getting-started/introduction) to learn more.
+Icons used in this application are from **Solar Icons** by **480 Design**, available via **Iconify**.  
+Licensed under the **Creative Commons Attribution 4.0 International License (CC BY 4.0)**.  
+Changes may have been made.
 
-## Setup
+**Source:**  
+https://icon-sets.iconify.design/solar/
 
-Make sure to install dependencies:
-
-```bash
-# npm
-npm install
-
-# pnpm
-pnpm install
-
-# yarn
-yarn install
-
-# bun
-bun install
-```
-
-## Development Server
-
-Start the development server on `http://localhost:3000`:
-
-```bash
-# npm
-npm run dev
-
-# pnpm
-pnpm dev
-
-# yarn
-yarn dev
-
-# bun
-bun run dev
-```
-
-## Production
-
-Build the application for production:
-
-```bash
-# npm
-npm run build
-
-# pnpm
-pnpm build
-
-# yarn
-yarn build
-
-# bun
-bun run build
-```
-
-Locally preview production build:
-
-```bash
-# npm
-npm run preview
-
-# pnpm
-pnpm preview
-
-# yarn
-yarn preview
-
-# bun
-bun run preview
-```
-
-Check out the [deployment documentation](https://nuxt.com/docs/getting-started/deployment) for more information.
+**License:**  
+https://creativecommons.org/licenses/by/4.0/
