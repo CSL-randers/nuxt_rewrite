@@ -1,14 +1,15 @@
 <script setup lang="ts">
     import { CalendarDate, DateFormatter, getLocalTimeZone } from '@internationalized/date'
     import type { TableColumn } from '@nuxt/ui'
-    import type { Run, RunStatus } from '~/lib/db/schema/index'
+    import type { RunStatus } from '~/lib/db/schema'
+    import type { RunListItem, RunListResponse } from '~/types/runs'
     import useFlattenArray from '~/composables/useFlattenArray'
 
-    const { data, status } = await useFetch<Run[]>('/api/runs', {
+    const { data, status, refresh } = await useFetch<RunListResponse>('/api/runs', {
         key: 'runs'
     })
 
-    const allRows = computed<Run[]>(() => useFlattenArray<Run>(data))
+    const allRows = computed<RunListItem[]>(() => useFlattenArray<RunListItem>(data))
 
     // Date formatter
     const df = new DateFormatter('da-DK', {
@@ -49,7 +50,7 @@
     })
 
     // Filter rows based on date range
-    const rows = computed<Run[]>(() => {
+    const filteredRows = computed<RunListItem[]>(() => {
         if (!dateRange.value.start || !dateRange.value.end) {
             return allRows.value
         }
@@ -65,12 +66,18 @@
         })
     })
 
+    const rows = computed<RunListItem[]>(() => {
+        return [...filteredRows.value].sort((a, b) => {
+            return new Date(b.bookingDate).getTime() - new Date(a.bookingDate).getTime()
+        })
+    })
+
     const togglePopover = (runId: string, type: string) => {
         const key = `${runId}-${type}`
         openPopovers.value[key] = openPopovers.value[key] ? null : type
     }
 
-    const columns: TableColumn<Run>[] = [
+    const columns: TableColumn<RunListItem>[] = [
         {
             accessorKey: 'bookingDate',
             header: 'Dato',
@@ -102,7 +109,7 @@
             size: 100,
             enableSorting: false,
             cell: ({ row }) => {
-                const errors = row.original.error
+                const errors = row.original.errors
                 if (!errors?.length) return null
 
                 const key = `${row.original.id}-error`
@@ -142,7 +149,7 @@
             size: 120,
             enableSorting: false,
             cell: ({ row }) => {
-                const docs = row.original.docs
+                const docs = row.original.documents
                 if (!docs?.length) return null
 
                 const key = `${row.original.id}-docs`
@@ -165,6 +172,15 @@
             <UDashboardNavbar title="Kørsler">
                 <template #leading>
                     <UDashboardSidebarCollapse />
+                </template>
+                <template #trailing>
+                    <UButton
+                        icon="i-lucide-refresh-cw"
+                        label="Opdater"
+                        variant="ghost"
+                        :loading="status === 'pending'"
+                        @click="refresh()"
+                    />
                 </template>
             </UDashboardNavbar>
         </template>
@@ -217,7 +233,21 @@
                     <div v-if="dateRange.start && dateRange.end" class="text-sm text-muted mb-3">
                         {{ rows.length }} kørsler i valgt periode
                     </div>
+                    <UEmpty
+                        v-if="!rows.length && status !== 'pending'"
+                        icon="i-lucide-archive"
+                        title="Ingen kørsler"
+                        description="Der er ingen kørsler i den valgte periode endnu."
+                        class="border border-dashed border-default rounded-lg"
+                    >
+                        <template #actions>
+                            <UButton size="sm" variant="solid" @click="refresh()">
+                                Opdater
+                            </UButton>
+                        </template>
+                    </UEmpty>
                     <UTable
+                        v-else
                         ref="table"
                         :data="rows"
                         :columns="columns"

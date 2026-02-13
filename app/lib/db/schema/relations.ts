@@ -13,7 +13,7 @@ import {
   bankingTxCode,
   bankingParty,
 } from "./banking";
-import { ErpRequest, ErpResponse } from "./erp";
+import { erpRequest, erpResponse } from "./erp";
 import { errorLog } from "./error";
 
 export const ruleRelations = relations(rule, ({ many, one }) => ({
@@ -53,7 +53,7 @@ export const runRelations = relations(run, ({ many }) => ({
   transactions: many(transaction),
   documents: many(document),
   bankingRequests: many(BankingRequest),
-  erpRequests: many(ErpRequest),
+  erpRequests: many(erpRequest),
   errors: many(errorLog),
 }));
 
@@ -72,18 +72,18 @@ export const bankingResponseRelations = relations(BankingResponse, ({ one }) => 
   }),
 }));
 
-export const erpRequestRelations = relations(ErpRequest, ({ one }) => ({
-  response: one(ErpResponse),
+export const erpRequestRelations = relations(erpRequest, ({ one }) => ({
+  response: one(erpResponse),
   run: one(run, {
-    fields: [ErpRequest.runId],
+    fields: [erpRequest.runId],
     references: [run.id],
   }),
 }));
 
-export const erpResponseRelations = relations(ErpResponse, ({ one }) => ({
-  request: one(ErpRequest, {
-    fields: [ErpResponse.requestId],
-    references: [ErpRequest.id],
+export const erpResponseRelations = relations(erpResponse, ({ one }) => ({
+  request: one(erpRequest, {
+    fields: [erpResponse.requestId],
+    references: [erpRequest.id],
   }),
 }));
 

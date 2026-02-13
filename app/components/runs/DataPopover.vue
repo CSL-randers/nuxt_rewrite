@@ -1,9 +1,10 @@
 <script setup lang="ts">
-    import type { Run } from '~/lib/db/schema/schema'
+    import { onBeforeUnmount } from 'vue'
+    import type { RunListItem } from '~/types/runs'
 
     interface Props {
         type: 'error' | 'transactions' | 'docs'
-        run: Run
+        run: RunListItem
         open: boolean
     }
 
@@ -15,35 +16,69 @@
     const emit = defineEmits<Emits>()
 
     const docUrlMap = new Map<string, string>()
+    const isClient = import.meta.client
 
-    const getDocUrl = (doc: any): string | null => {
-        if (!doc.content) return null
+    const attemptCreateBlobFromContent = (doc: RunListItem['documents'][number]) => {
+        if (doc.content instanceof Blob) {
+            return doc.content
+        }
+
+        if (typeof doc.content === 'string') {
+            try {
+                const normalizedContent = doc.content.includes(',')
+                    ? doc.content.split(',').at(-1) ?? ''
+                    : doc.content
+                const binary = atob(normalizedContent)
+                const bytes = new Uint8Array(binary.length)
+                for (let i = 0; i < binary.length; i++) {
+                    bytes[i] = binary.charCodeAt(i)
+                }
+                return new Blob([bytes], { type: doc.mimeType ?? 'application/octet-stream' })
+            } catch (error) {
+                console.error('Failed to decode document content', doc.id, error)
+            }
+        }
+
+        return null
+    }
+
+    const getDocUrl = (doc: RunListItem['documents'][number]): string | null => {
+        if (!isClient || !doc.content) return null
         
         let url = docUrlMap.get(doc.id)
         if (!url) {
-            try {
-                const blob = doc.content instanceof Blob ? doc.content : new Blob([doc.content])
-                url = URL.createObjectURL(blob)
-                docUrlMap.set(doc.id, url)
-            } catch (e) {
-                console.error('Failed to create object URL for document:', doc.id, e)
+            const blob = attemptCreateBlobFromContent(doc)
+            if (!blob) {
                 return null
             }
+            url = URL.createObjectURL(blob)
+            docUrlMap.set(doc.id, url)
         }
         return url
     }
 
-    const groupDocsByType = (docs: any[]) => {
-        return docs.reduce((acc: Record<string, any[]>, d: any) => {
-            acc[d.type] = acc[d.type] ?? []
-            acc[d.type].push(d)
+    onBeforeUnmount(() => {
+        if (!isClient) {
+            return
+        }
+        for (const url of docUrlMap.values()) {
+            URL.revokeObjectURL(url)
+        }
+        docUrlMap.clear()
+    })
+
+    const groupDocsByType = (docs: RunListItem['documents']) => {
+        return docs.reduce((acc: Record<string, RunListItem['documents']>, d) => {
+            const typeKey = d.type ?? 'ukendt'
+            acc[typeKey] = acc[typeKey] ?? []
+            acc[typeKey].push(d)
             return acc
         }, {})
     }
 
-    const groupTransactionsByAccount = (txs: any[]) => {
-        return txs.reduce((acc: Record<string, any[]>, tx: any) => {
-            const account = tx.bankAccountName || 'Ukendt konto'
+    const groupTransactionsByAccount = (txs: RunListItem['transactions']) => {
+        return txs.reduce((acc: Record<string, RunListItem['transactions']>, tx) => {
+            const account = tx.bankAccountLabel || tx.accountId || 'Ukendt konto'
             if (!acc[account]) {
                 acc[account] = []
             }
@@ -55,11 +90,11 @@
     const getTitle = () => {
         switch (props.type) {
             case 'error':
-                return `Fejl (${props.run.error?.length || 0})`
+                return `Fejl (${props.run.errors?.length || 0})`
             case 'transactions':
                 return `Transaktioner (${props.run.transactions?.length || 0})`
             case 'docs':
-                return `Dokumenter (${props.run.docs?.length || 0})`
+                return `Dokumenter (${props.run.documents?.length || 0})`
         }
     }
 
@@ -88,11 +123,11 @@
     const getCount = () => {
         switch (props.type) {
             case 'error':
-                return props.run.error?.length || 0
+                return props.run.errors?.length || 0
             case 'transactions':
                 return props.run.transactions?.length || 0
             case 'docs':
-                return props.run.docs?.length || 0
+                return props.run.documents?.length || 0
         }
     }
 </script>
@@ -116,10 +151,10 @@
                 </div>
 
                 <!-- Error Content -->
-                <template v-if="type === 'error' && run.error">
+                <template v-if="type === 'error' && run.errors">
                     <ul class="list-disc pl-5 space-y-2">
-                        <li v-for="(err, i) in run.error" :key="i" class="text-sm text-error">
-                            {{ err }}
+                        <li v-for="err in run.errors" :key="err.id" class="text-sm text-error">
+                            {{ err.message ?? err.errorString ?? 'Ukendt fejl' }}
                         </li>
                     </ul>
                 </template>
@@ -149,16 +184,16 @@
                 </template>
 
                 <!-- Documents Content -->
-                <template v-if="type === 'docs' && run.docs">
+                <template v-if="type === 'docs' && run.documents">
                     <div class="space-y-3">
-                        <template v-for="(docsOfType, docType) in groupDocsByType(run.docs)" :key="String(docType)">
+                        <template v-for="(docsOfType, docType) in groupDocsByType(run.documents)" :key="String(docType)">
                             <div>
                                 <h4 class="font-medium text-sm mb-2 capitalize">{{ docType }}</h4>
                                 <ul class="list-disc pl-5 space-y-1">
                                     <li v-for="doc in docsOfType" :key="doc.id" class="text-sm">
-                                        <template v-if="doc.content">
+                                        <template v-if="doc.content && isClient">
                                             <a
-                                                :href="getDocUrl(doc)!"
+                                                :href="getDocUrl(doc) ?? undefined"
                                                 :download="doc.filename"
                                                 class="text-blue-600 hover:underline font-medium"
                                             >
@@ -168,7 +203,7 @@
                                         <template v-else>
                                             <span class="text-muted">{{ doc.filename }}</span>
                                         </template>
-                                        <span class="text-muted text-xs ml-1">({{ doc.mimetype }})</span>
+                                        <span class="text-muted text-xs ml-1">({{ doc.mimeType ?? doc.fileExtension }})</span>
                                     </li>
                                 </ul>
                             </div>

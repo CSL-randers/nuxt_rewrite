@@ -1,7 +1,7 @@
-import crypto from "crypto";
-import { db } from "~app/lib/db/index";
-import { Account } from "~app/lib/db/schema/index";
-import { bankingIntegrationMetadata, type BankingIntegrationMetadata } from "~app/lib/env";
+import crypto from "crypto"
+import db from '~/app/lib/db'
+import { account } from '~/app/lib/db/schema'
+import { bankingIntegrationMetadata, type BankingIntegrationMetadata } from "~/app/lib/env";
 
 export async function getBankingMetaData() {
   return bankingIntegrationMetadata;
@@ -67,33 +67,33 @@ export function generateAuthHeader(
 // Hent kontoudtog for en konto med Nuxt useFetch
 async function fetchTransactionsForAccount(
   accountId: string,
-  meta: Awaited<ReturnType<typeof getBankingMetaData>>
+  meta: BankingIntegrationMetadata,
 ): Promise<SimpleAccountReportEntry[]> {
   const requestId = crypto.randomUUID();
   const authHeader = generateAuthHeader(accountId, requestId, meta);
 
-  const { data, error } = await useFetch<SimpleAccountReportEntry[]>(
-    `https://api.bankintegration.dk/statement?account=${accountId}`,
-    {
-      headers: {
-        Authorization: authHeader,
-        "Content-Type": "application/json",
-      },
-      method: "GET",
-      server: true, // Sørger for at kaldet kører på serveren
-    }
-  );
+  const response = await fetch(`https://api.bankintegration.dk/statement?account=${accountId}`, {
+    headers: {
+      Authorization: authHeader,
+      "Content-Type": "application/json",
+    },
+    method: "GET",
+  });
 
-  if (error.value) {
-    throw new Error(`Fejl ved hentning af kontoudtog for konto ${accountId}: ${error.value}`);
+  if (!response.ok) {
+    throw new Error(
+      `Fejl ved hentning af kontoudtog for konto ${accountId}: ${response.status} ${response.statusText}`,
+    );
   }
 
-  return data.value ?? [];
+  const data = (await response.json()) as SimpleAccountReportEntry[] | null;
+
+  return data ?? [];
 }
 
 // Iterer over alle konti og hent transaktioner
 export async function fetchBankTransactions(): Promise<SimpleAccountReportEntry[]> {
-  const accounts = await db.select().from(Account).all();
+  const accounts = await db.select().from(account);
   const meta = await getBankingMetaData();
   const allTransactions: SimpleAccountReportEntry[] = [];
 

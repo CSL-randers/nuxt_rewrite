@@ -1,5 +1,4 @@
 import type { TransactionInsertSchema } from '~/lib/db/schema/index'
-import { Run, Account } from '~/lib/db/schema/index'
 
 export function mapBankEntryToTransaction(
   entry: object,
