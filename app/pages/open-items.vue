@@ -1,66 +1,53 @@
 <script lang="ts" setup>
-    import type { TransactionSelectSchema } from '~/lib/db/schema/index'
-    import useFlattenArray from '~/composables/useFlattenArray'
-    
-    const { data } = await useFetch<TransactionSelectSchema[]>('/api/transactions', {
-        lazy: true
-    })
+import BookingModal from '~/components/open-items/BookingModal.vue'
+import useFlattenArray from '~/composables/useFlattenArray'
+import type { OpenTransaction } from '~/types/transactions'
+import { buildTransactionSummary, type TransactionSummary } from '~/utils/transactionSummary'
 
-    const postings = computed<TransactionSelectSchema[]>(() => useFlattenArray<TransactionSelectSchema>(data));
-    
-    const postingsByAccount = computed<Record<string, TransactionSelectSchema[]>>(() => {
-        const result: Record<string, TransactionSelectSchema[]> = {}
+const { data, pending, refresh } = await useFetch<OpenTransaction[]>(
+    '/api/transactions',
+    { key: 'open-transactions', lazy: false }
+)
 
-        postings.value.forEach(tx => {
-            const accountName = tx.bankAccountName || 'Ukendt konto'
-            if (!result[accountName]) {
-                result[accountName] = []
-            }
-            result[accountName].push(tx)
-        })
+const postings = computed<OpenTransaction[]>(() => useFlattenArray<OpenTransaction>(data))
 
-        return result
-    });
-    
-    type VisibleTransaction = {
-        Beløb: number | undefined
-        Transaktionstype: string
-        Modpart: string
-        Referencer: string[]
-    }
-
-    const visibleDataById = computed<Record<string, VisibleTransaction>>(() => {
-        const result: Record<string, VisibleTransaction> = {}
-
-        postings.value.forEach(tx => {
-            result[tx.id] = {
-                Beløb: tx.amount ?? undefined,
-                Transaktionstype: tx.transactionType ?? '',
-                Modpart: tx.counterpart ?? '',
-                Referencer: tx.references ?? []
-            }
-        })
-        return result
-    })
-
-    const amountFormatter = new Intl.NumberFormat('da-DK', {
-        style: 'currency',
-        currency: 'DKK'
-    })
-
-    const formatValue = (key: string, value: unknown): string | string[] => {
-        if (key === 'Beløb' && typeof value === 'number') {
-            return amountFormatter.format(value)
+const postingsByAccount = computed<Record<string, OpenTransaction[]>>(() => {
+    const result: Record<string, OpenTransaction[]> = {}
+    postings.value.forEach((tx) => {
+        const accountName = tx.bankAccountName || 'Ukendt konto'
+        if (!result[accountName]) {
+            result[accountName] = []
         }
+        result[accountName].push(tx)
+    })
+    return result
+})
 
-        if (Array.isArray(value)) {
-            return value.map(v => String(v))
-        }
+const summaryById = computed<Record<string, TransactionSummary>>(() => {
+    const map: Record<string, TransactionSummary> = {}
+    postings.value.forEach((tx) => {
+        map[tx.id] = buildTransactionSummary(tx)
+    })
+    return map
+})
 
-        return String(value ?? '')
-    }
+const isBookingOpen = ref(false)
+const selectedTransactionId = ref<string | null>(null)
 
+const selectedTransaction = computed(() =>
+    postings.value.find((tx) => tx.id === selectedTransactionId.value) ?? null
+)
 
+function openBookingModal(transaction: OpenTransaction) {
+    selectedTransactionId.value = transaction.id
+    isBookingOpen.value = true
+}
+
+async function handleBookingProcessed() {
+    isBookingOpen.value = false
+    selectedTransactionId.value = null
+    await refresh()
+}
 </script>
 
 <template>
@@ -74,63 +61,94 @@
         </template>
 
         <template #body>
-            <UPageSection
-                v-for="(items, account) in postingsByAccount"
-                :key="account"
-                :title="account"
-                headline="Nordea"
-            >
-                <UPageColumns>
-                    <UPageCard
-                        v-for="item in items"
-                        :key="item.id"
-                        :title="'Transaktion #' + item.id"
-                        :description="new Date(item.bookingDate).toLocaleDateString('da-DK')"
-                        :disabled="!visibleDataById[item.id]"
-                        variant="soft"
-                    >
-                        <div v-if="visibleDataById[item.id]" class="space-y-1 text-sm">
-                            <div
-                                v-for="([key, value]) in Object.entries(visibleDataById[item.id] ?? {})"
-                                :key="key"
-                                class="flex justify-between gap-4"
-                            >
-                                <span class="font-medium text-gray-400 whitespace-nowrap">
-                                    {{ key }}
-                                </span>
+            <div v-if="pending" class="flex justify-center py-10">
+                <USkeleton class="h-10 w-32" />
+            </div>
+            <div v-else-if="!postings.length" class="py-10 text-center text-gray-500">
+                Der er ingen åbne transaktioner at behandle.
+            </div>
+            <template v-else>
+                <UPageSection
+                    v-for="(items, account) in postingsByAccount"
+                    :key="account"
+                    :title="account"
+                    headline="Nordea"
+                >
+                    <UPageColumns>
+                        <UPageCard
+                            v-for="item in items"
+                            :key="item.id"
+                            :title="'Transaktion #' + item.id"
+                            :description="item.counterpart || 'Ukendt modpart'"
+                            :disabled="!summaryById[item.id]"
+                            variant="soft"
+                        >
+                            <div v-if="summaryById[item.id]" class="space-y-4">
+                                <div class="flex flex-wrap items-start justify-between gap-4">
+                                    <div>
+                                        <p class="text-xs font-medium text-gray-500">{{ summaryById[item.id]?.amount.label }}</p>
+                                        <p class="text-2xl font-semibold">{{ summaryById[item.id]?.amount.value }}</p>
+                                    </div>
+                                    <div class="text-right">
+                                        <p class="text-xs font-medium text-gray-500">{{ summaryById[item.id]?.bookingDate.label }}</p>
+                                        <p class="font-medium">{{ summaryById[item.id]?.bookingDate.value }}</p>
+                                    </div>
+                                </div>
 
-                                <span class="text-right">
-                                    <template v-if="Array.isArray(value)">
-                                        <div
-                                            v-for="(ref, index) in formatValue(key, value)"
-                                            :key="index"
+                                <section
+                                    v-for="section in summaryById[item.id]?.sections"
+                                    :key="section.key"
+                                    class="space-y-2"
+                                >
+                                    <p class="text-xs font-medium uppercase tracking-wide text-gray-500">
+                                        {{ section.label }}
+                                    </p>
+                                    <UList v-if="'items' in section" :items="section.items">
+                                        <template #item="{ item: sectionItem }">
+                                            <div class="flex items-center justify-between gap-4 text-sm">
+                                                <span class="text-gray-500">{{ sectionItem.label }}</span>
+                                                <span class="font-medium text-right">{{ sectionItem.value }}</span>
+                                            </div>
+                                        </template>
+                                    </UList>
+                                    <div v-else class="flex flex-wrap gap-2">
+                                        <UBadge
+                                            v-for="(chip, chipIndex) in section.chips"
+                                            :key="chip + chipIndex"
+                                            color="neutral"
+                                            variant="soft"
                                         >
-                                            {{ ref }}
-                                        </div>
-                                    </template>
+                                            {{ chip }}
+                                        </UBadge>
+                                    </div>
+                                </section>
 
-                                    <template v-else>
-                                        {{ formatValue(key, value) }}
-                                    </template>
-                                </span>
+                                <USeparator>
+                                    <div class="flex w-full items-center justify-between gap-2">
+                                        <span class="text-sm font-medium">Behandl</span>
+                                        <UButton
+                                            class="rounded-full"
+                                            color="primary"
+                                            size="lg"
+                                            trailing-icon="solar:pen-new-round-bold-duotone"
+                                            @click="openBookingModal(item)"
+                                        />
+                                    </div>
+                                </USeparator>
+
+                                <p class="text-xs text-gray-500">
+                                    {{ summaryById[item.id]?.transactionId.label }}: {{ summaryById[item.id]?.transactionId.value }}
+                                </p>
                             </div>
-                        </div>
-                        <div></div>
-                        <USeparator>
-                            <div class="flex items-center justify-between gap-2">
-                                <span class="font-medium whitespace-nowrap">
-                                    Behandl
-                                </span>
-                                <UButton
-                                    class="font-bold rounded-full"
-                                    trailing-icon="solar:pen-new-round-bold-duotone"
-                                    size="xl"
-                                />
-                            </div>
-                        </USeparator>
-                    </UPageCard>
-                </UPageColumns>
-            </UPageSection>
+                        </UPageCard>
+                    </UPageColumns>
+                </UPageSection>
+            </template>
         </template>
     </UDashboardPanel>
+    <BookingModal
+        v-model:open="isBookingOpen"
+        :transaction="selectedTransaction"
+        @processed="handleBookingProcessed"
+    />
 </template>
